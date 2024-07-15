@@ -175,6 +175,7 @@ class MechPart:
                 self.structure -= overspill
                 #print(f"{self.name} took {dmg-overspill} damage! {self.name}'s armour was stripped and the structure took {overspill} damage!")
                 critnum = docriticals()
+                if critnum > 0: mekself.critsthisturn+=1
                 crit(self, critnum, mekself)
                 if self.structure <= 0:
                     self.isdestroyed = True
@@ -358,6 +359,7 @@ class Battlemech:
         self.weplist = []
         self.dmgthisturn = 0
         self.tmm = 0
+        self.critsthisturn = 0
         self.wepsgetter()
 
     def shutdown(self, target, guaranteed):
@@ -579,7 +581,7 @@ awesomecentretorso8q = MechPartBig("Awesome CT", 30, 19, 25, copy.deepcopy(fusen
 thunderbolt5srightarm = MechPartBig("Thunderbolt RA", 20, 0, 10, "Shoulder", "Upper Arm", "Lower Arm", "Hand", copy.deepcopy(largelaser))
 
 #Mechwarriors
-genericmechwarrior = Pilot("David B.", 5, 4)
+genericmechwarrior = Pilot("David B.", 5, 2)
 
 #Battlemechs
 awesome8q = Battlemech("Awesome 8Q", awesomehead8q, awesomeleftarm8q, awesomerightarm8q, awesomeleftleg8q, awesomerightleg8q, awesomerighttorso8q, awesomelefttorso8q, awesomecentretorso8q, genericmechwarrior, 3, 80)
@@ -624,17 +626,18 @@ def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=N
         return "Miss!"
 
 def crit(target, critnum, mek):
+    critoverflow = 0
     if isinstance(target, str):
         return
     if critnum == 3:
         a = lambda l:target.name.lower()[-2:] == l
         if a('hd') or a('ll') or a('rl') or a('la') or a(r'a'):
-            print("Wow")
+            #print("Wow")
             target.isdestroyed = True
             if a('hd'):
                 mek.isdead = True
                 mek.causeofdeath = ('HKill')
-                print("Wowie")
+                #print("Wowie")
             return
     times = 0
     z=0
@@ -685,7 +688,7 @@ def crit(target, critnum, mek):
             #print(getattr(a, 'isdamaged'))
             setattr(target, location, None)
             continue
-    crit(dooverflow(target, mek), (critnum - times), mek)
+    crit(dooverflow(target, mek), (critoverflow), mek)
 
 def dooverflow(part, target=None):
     if part.name.lower()[-2:] == "hd":
@@ -754,15 +757,18 @@ enemy2 = copy.deepcopy(awesome8q)
 
 CoDs = {"HKill":0, "PKill":0, "EKill":0, "CTKill":0, "AmmoKill":0, "Survived":0}
 Turns = []
+crits = []
 avgdmgs = {}
 for i in range(20):
     exec(f"turn{i+1}dmg = []")
-for i in range(10000):
+for i in range(100):
+    critsthisgame = 0
     #print(i)
+    if i % 100 == 0: print(i)
     enemy2 = copy.deepcopy(awesome8q)
     enemy2.pos = 0
     enemy = copy.deepcopy(awesome8q)
-    for i in range(20):
+    for i in range(12):
         enemy2.move(True)
         if i == 0:
             enemy.pos = 21
@@ -790,6 +796,7 @@ for i in range(10000):
             enemy.pos = 1
         #print(f"Turn {i+1}")
         enemy.barrage(enemy2)
+        critsthisgame+=enemy2.critsthisturn
         exec(f"turn{i+1}dmg.append(enemy.dmgthisturn)")
         if enemy2.isdead:
             #print(f"Enemy was destroyed in {i+1} turns!")
@@ -800,12 +807,18 @@ for i in range(10000):
             break
     if not enemy2.isdead:
         CoDs["Survived"] +=1
+    crits.append(critsthisgame)
 
 for i in range(20):
     try:
         exec(f"avgdmgs['turn{i+1}'] = mean(turn{i+1}dmg)")
     except:
         continue
+totdmg=0
+for key, value in avgdmgs.items():
+    totdmg+=float(value)
+print(f"Total Average Damage was {totdmg}!")
+print(f"{mean(crits)} crits per game.")
 print(avgdmgs)
 print(CoDs)
 print(f"Killing took on average {mean(Turns)} turns! \n {stdev(Turns)}")
