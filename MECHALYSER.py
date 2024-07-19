@@ -135,6 +135,8 @@ class MechPart:
         self.ishead = ishead
         self.multislot()
         self.blasters = []
+        self.hasammo = False
+        self.ammoslots = []
         self.listweps()
         self.slotshit = []
 
@@ -144,6 +146,11 @@ class MechPart:
             if isinstance(attrvalue, Weapon):
                 self.blasters.append(attr)
                 self.hasweps = True
+            if isinstance(attrvalue, AmmoBin):
+                self.ammoslots.append(attr)
+                self.hasammo = True
+        #print(self.ammoslots)
+
     def multislot(self):
         #if isinstance(self, MechPartBig):
            # return
@@ -228,6 +235,8 @@ class MechPartBig(MechPart):
         self.slot12 = slot12
         self.blasters = []
         self.slotshit = []
+        self.hasammo = False
+        self.ammoslots = []
         self.hasweps = False
         self.multislot()
         self.listweps()
@@ -357,13 +366,15 @@ class Battlemech:
         self.causeofdeath = ""
         self.pos = 0
         self.weplist = []
+        self.ammolist = []
         self.dmgthisturn = 0
         self.tmm = 0
         self.critsthisturn = 0
-        self.wepsgetter()
+        self.wepsandammogetter()
 
     def shutdown(self, target, guaranteed):
         pass
+
     def move(self, evading=False, enemy=None):
         lranges = []
         mranges = []
@@ -401,13 +412,18 @@ class Battlemech:
                 print(wep)'''
 
         pass
-    def wepsgetter(self):
+    def wepsandammogetter(self):
         for attr in dir(self):
             attrval = getattr(self, attr)
             if isinstance(attrval, MechPart) and getattr(attrval, 'hasweps'):
                 for shots in attrval.blasters:
                     wep = getattr(attrval, shots)
                     exec(f"self.weplist.append('{attrval.name.lower()[-2:]} {shots}')")
+            if isinstance(attrval, MechPart) and getattr(attrval, 'hasweps'):
+                for i in attrval.ammoslots:
+                    ammo = getattr(attrval, i)
+                    #print(ammo)
+                    exec(f"self.ammolist.append('{attrval.name.lower()[-2:]} {i}')")
 
 
     def resolvedamage(self, dmg, location, hascrit=False):
@@ -512,7 +528,7 @@ class Battlemech:
     def weightclasscalc(self):
         if self.tonnage <= 15:
             self.weightclass = "Proto"
-        if self.tonnage <= 35:
+        elif self.tonnage <= 35:
             self.weightclass = "Light"
         elif self.tonnage <= 55:
             self.weightclass = "Medium"
@@ -524,6 +540,25 @@ class Battlemech:
             self.weightclass = "Superheavy"
         else:
             return
+    def useammo(self, wep):
+        #print("Using Ammo")
+        firedgood = False
+        for i in self.ammolist:
+            loc =i[0:2].lower()
+            slot = i[-6:].strip()
+            loc = getattr(self ,loc)
+            ammo = getattr(loc, slot)
+            if ammo.name == wep.ammo:
+                if ammo.ammonum > 0:
+                    #print(ammo.ammonum)
+                    #print(f"{wep.name} fired!")
+                    ammo.ammonum-=1
+                    #print(ammo.ammonum)
+                    firedgood = True
+                    return firedgood
+                else:
+                    continue
+        return firedgood
 
 
 
@@ -537,8 +572,11 @@ fusengine = MechUtility("Fusion Engine", 1, False, True, )
 gyro = MechUtility("Gyro", 1, False, False, True)
 
 #Ammo Bins
-mgammo = AmmoBin("MG Ammo", 100, 1)
+mgammo = AmmoBin("MG Ammo", 200, 1, True, 2)
+ac2ammo = AmmoBin("AC2 Ammo", 25, 1, True, 2)
+ac5ammo = AmmoBin("AC5 Ammo", 20, 1, True, 5)
 ac10ammo = AmmoBin("AC10 Ammo", 10, 1, True, 10)
+ac20ammo = AmmoBin("AC20 Ammo", 5, 1, True, 20)
 
 #Lasers
 largelaser = Weapon("Large Laser", 5, 10, 15, 8, 8, "DE", 123, 2)
@@ -604,6 +642,15 @@ def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=N
         rmod = 4
     else:
         return "Impossible"
+    if hasattr(shooter, 'ammo'):
+        if getattr(shooter, 'ammo') != None:
+            #print(shooter)
+            hadammo = firingmech.useammo(shooter)
+            if not hadammo:
+                print("Click!")
+                return
+        else:
+            raise(f"{shooter.name} has attr ammo, but Ammo is set to None!")
     hittarget = skill + rmod + shooter.targetmod + heatmod + movemod + target.tmm
     firingmech.heat += shooter.heat
     if allhit:
@@ -761,7 +808,7 @@ crits = []
 avgdmgs = {}
 for i in range(20):
     exec(f"turn{i+1}dmg = []")
-for i in range(100):
+for i in range(10000):
     critsthisgame = 0
     #print(i)
     if i % 100 == 0: print(i)
@@ -819,7 +866,7 @@ for key, value in avgdmgs.items():
     totdmg+=float(value)
 print(f"Total Average Damage was {totdmg}!")
 print(f"{mean(crits)} crits per game.")
-print(avgdmgs)
+print(mean(avgdmgs.values()))
 print(CoDs)
 print(f"Killing took on average {mean(Turns)} turns! \n {stdev(Turns)}")
 
