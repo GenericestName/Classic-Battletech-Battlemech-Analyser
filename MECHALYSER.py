@@ -1,8 +1,39 @@
 import random, math, pathlib, copy, time
 from statistics import mean
 from statistics import stdev
+from math import floor
 import statistics
 StartTime = time.time()
+clust2 = [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
+clust3 = [1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3]
+clust4 = [1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4]
+clust5 = [1, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5]
+clust6 = [2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6]
+clust7 = [2, 2, 3, 4, 4, 4, 4, 6, 6, 7, 7]
+clust8 = [3, 3, 4, 4, 5, 5, 5, 6, 6, 8, 8]
+clust9 = [3, 3, 4, 5, 5, 5, 5, 7, 7, 9, 9]
+clust10 = [3, 3, 4, 6, 6, 6, 6, 8, 8, 10, 10]
+clust11 = [4, 4, 5, 7, 7, 7, 7, 8, 8, 11, 11]
+clust12 = [4, 4, 5, 8, 8, 8, 8, 10, 10, 12, 12]
+clust13 = [4, 4, 5, 8, 8, 8, 8, 11, 11, 13, 13]
+clust14 = [5, 5, 6, 9, 9, 9, 9, 11, 11, 14, 14]
+clust15 = [5, 5, 6, 9, 9, 9, 9, 12, 12, 15, 15]
+clust16 = [5, 5, 7, 10, 10, 10, 10, 13, 13, 16, 16]
+clust17 = [5, 5, 7, 10, 10, 10, 10, 14, 14, 17, 17]
+clust18 = [6, 6, 8, 11, 11, 11, 11, 14, 14, 18, 18]
+clust19 = [6, 6, 8, 11, 11, 11, 11, 15, 15, 19, 19]
+clust20 = [6, 6, 9, 12, 12, 12, 12, 16, 16, 20, 20]
+clust21 = [7, 7, 9, 13, 13, 13, 13, 17, 17, 21, 21]
+clust22 = [7, 7, 9, 14, 14, 14, 14, 18, 18, 22, 22]
+clust23 = [7, 7, 10, 15, 15, 15, 15, 19, 19, 23, 23]
+clust24 = [8, 8, 10, 16, 16, 16, 16, 20, 20, 24, 24]
+clust25 = [8, 8, 10, 16, 16, 16, 16, 21 ,21, 25, 25]
+clust26 = [9, 9, 11, 17, 17, 17, 17, 21, 21, 26, 26]
+clust27 = [9, 9, 11, 17, 17, 17, 17, 22, 22, 27, 27]
+clust28 = [9, 9, 11, 17, 17, 17, 17, 23, 23, 28, 28]
+clust29 = [10, 10, 12, 18, 18, 18, 18, 23, 23, 29, 29]
+clust30 = [10, 10, 12, 18, 18, 18, 18, 24, 24, 30, 30]
+clust40 = [12, 12, 18, 24, 24, 24, 24, 32, 32, 40, 40]
 
 def RollLocation(Float=True, HasCrit=False, Debug=False):
     Roll1 = random.randint(1, 6)
@@ -302,8 +333,19 @@ class Weapon(object):
             return
         except ZeroDivisionError:
             self.ratio=0
+class Missile(Weapon):
+    def __init__ (self, name, srange, mrange, lrange, dmg, heat, damage_type = None, BV=0, slots = 1, targetmod =0, minrange=0, ammo=None, cluster=None, clustermod = 0, grouping=None, streak=False, artemis4=False, artemis5=False):
+        #super.__init__(self, name, srange, mrange, lrange, dmg, heat, damage_type, BV, slots, targetmod, minrange, ammo, cluster)
+        self.artemis4 = artemis4
+        self.artemis5 = artemis5
+        self.streak = streak
+        self.grouping = grouping
+        self.cluster = cluster
+        self.clustermod = clustermod
+        super().__init__(name, srange, mrange, lrange, dmg, heat)
+
 class Autocannon(Weapon):
-    def __init__(self, name, srange, mrange, lrange, dmg, heat, damage_type = None, BV=0, slots=1, targetmod=0, minrange=0, ammo = None, cluster = None, isexplosive=False, xplodmg=0):
+    def __init__(self, name, srange, mrange, lrange, dmg, heat, damage_type = None, BV=0, slots=1, targetmod=0, minrange=0, ammo = None, cluster = None, isexplosive=False, xplodmg=0, grouping = None):
         self.name = name
         self.minrange = minrange
         self.srange = srange
@@ -373,8 +415,47 @@ class Battlemech:
         self.tmm = 0
         self.critsthisturn = 0
         self.qdir = list(a for a in dir(self) if not a.startswith('__'))
+        self.hiphits = 0
         self.sinkingcalculator()
         self.wepsandammogetter()
+        self.motives = {}
+        self.turn = 0
+
+    def motivecalc(self):
+        hiphits = 0
+        llhip = False
+        rlhip = False
+        if self.ll.isdestroyed and self.rl.isdestroyed:
+            self.walkspeed = 0
+            self.runspeed=0
+            return
+        elif self.ll.isdestroyed or self.rl.isdestroyed:
+            self.walkspeed = 1
+            self.runspeed = 1
+        for key, value in self.motives.items():
+            if key[3:] == "Hip":
+                hiphits+=1
+                self.walkspeed = math.ceil(self.maxwalkspeed/2)
+                if key[0:2] == "rl":
+                    rlhip = True
+                else:
+                    llhip = True
+            if key[3:] == "Lower Leg" or key[3:] == "Upper Leg" or key[3:] == "Foot":
+                if key[0:2] == "rl" and "rl Hip" in self.motives.items():
+                    if self.motives.get("rl Hip") > value: continue
+                    else:self.walkspeed -=1
+                elif key[0:2] == "ll" and "ll Hip" in self.motives.items():
+                    if self.motives.get("rl Hip") > value: continue
+                    else:self.walkspeed -=1
+                else:
+                    self.walkspeed -=1
+        if hiphits ==2:
+            self.walkspeed = 0
+            self.runspeed = 0
+        self.runspeed = math.ceil(self.walkspeed*1.5)
+        if hiphits == 1:
+            self.runspeed = 1
+
 
     def shutdown(self, target, guaranteed):
         pass
@@ -389,7 +470,9 @@ class Battlemech:
         runtmm = 0
         jumptmm = 0
         if evading:
-            if 2 < self.runspeed < 5:
+            if 3 > self.runspeed:
+                runtmm = 0
+            elif 2 < self.runspeed < 5:
                 runtmm = 1
             elif 4 < self.runspeed < 7:
                 runtmm = 2
@@ -433,8 +516,9 @@ class Battlemech:
             if isinstance(attrval, MechPart) and getattr(attrval, 'hasammo') and not getattr(attrval, 'isdestroyed'):
                 for i in attrval.ammoslots:
                     ammo = getattr(attrval, i)
-                    #print(ammo)
-                    exec(f"self.ammolist.append('{attrval.name.lower()[-2:]} {i}')")
+                    if not ammo.isdamaged:
+                        print(ammo)
+                        exec(f"self.ammolist.append('{attrval.name.lower()[-2:]} {i}')")
         #self.weplist = [attr for attr in dir(self) if isinstance(getattr(self, attr), MechPart) and getattr(getattr(self, attr),'hasweps') and not getattr(getattr(self, attr), 'isdestroyed')]
 
 
@@ -447,12 +531,6 @@ class Battlemech:
             self.isdead = True
             self.causeofdeath = "CTKill"
             return
-        if location == self.hd:
-            self.pilot.DoPilotDamage()
-            if self.pilot.isdead:
-                self.isdead = True
-                self.causeofdeath = "PKill"
-        o = location.TakeDamage(dmg, hascrit, self)
         if self.lt.isdestroyed:
             self.la.isdestroyed = True
             self.la.structure = 0
@@ -461,6 +539,14 @@ class Battlemech:
             self.ra.isdestroyed = True
             self.ra.structure = 0
             self.ra.armour = 0
+        if dmg == 0:
+            return
+        if location == self.hd:
+            self.pilot.DoPilotDamage()
+            if self.pilot.isdead:
+                self.isdead = True
+                self.causeofdeath = "PKill"
+        o = location.TakeDamage(dmg, hascrit, self)
         if o > 0:
             newloc = dooverflow(location, self)
             #print(newloc)
@@ -470,6 +556,7 @@ class Battlemech:
             else:
                 newloc = getattr(self, newloc.name.lower()[-2:])
                 self.resolvedamage(o, newloc)
+        self.motivecalc()
 
     def doammoexplosion(self, target):
         pass
@@ -600,10 +687,13 @@ gyro = MechUtility("Gyro", 1, False, False, True)
 
 #Ammo Bins
 mgammo = AmmoBin("MG Ammo", 200, 1, True, 2)
-ac2ammo = AmmoBin("AC2 Ammo", 25, 1, True, 2)
+ac2ammo = AmmoBin("AC2 Ammo", 45, 1, True, 2)
 ac5ammo = AmmoBin("AC5 Ammo", 20, 1, True, 5)
 ac10ammo = AmmoBin("AC10 Ammo", 10, 1, True, 10)
 ac20ammo = AmmoBin("AC20 Ammo", 5, 1, True, 20)
+srm2ammo = AmmoBin("SRM2 Ammo", 50, 1, True, 4)
+srm4ammo = AmmoBin("SRM4 Ammo", 25, 1, True, 8)
+srm6ammo = AmmoBin("SRM6 Ammo", 12, 1, True, 12)
 
 #Lasers
 largelaser = Weapon("Large Laser", 5, 10, 15, 8, 8, "DE", 123, 2)
@@ -634,6 +724,13 @@ heavyppc = Weapon("Heavy PPC", 6, 12, 18, 15, 15, "DE", 317, 4, 0, 3)
 #Ballistics
 machinegun = Autocannon("Machine Gun", 1, 2, 3, 2, 0, "AI", 20, 1, 0, 0, "MG Ammo")
 
+#Missiles
+srm2 = Missile("SRM 2", 3, 6, 9, 2, 2, "Cluster", 21, 1, 0, 0, "SRM2 Ammo", 2, 0, 1, False, False)
+isssrm2 = Missile("Streak SRM 2", 3, 6, 9, 2, 2, "Cluster", 30, 1, 0, 0, "SRM2 Ammo", 2, 0, 1, True, False, False)
+clanssrm2 = Missile("Streak SRM 2", 4, 8, 12, 2, 2, "Cluster", 40, 1, 0, 0, "SRM2 Ammo", 2, 0, 1, True)
+srm4 = Missile("SRM 4", 3, 6, 9, 2, 3, "Cluster", 39, 1, 0, 0, "SRM4 Ammo", 4, 0, 1)
+isssrm4 = Missile("Streak SRM 4", 3, 6, 9, 2, 3, "Cluster", 59, 1, 0, 0, "SRM4 Ammo", 4, 0, 1, True)
+clanssrm4 = Missile("Streak SRM 4", 4, 8, 12, 2, 3, "Cluster", 59, 1, 0, 0, "SRM4 Ammo", 4, 0, 1, True)
 #'Mech Bits
 awesomehead8q = MechPart("Awesome HD", 9, 3, "Life Support", "Sensors", "Cockpit", copy.deepcopy(smalllaser), "Sensors", "Life Support", False, True)
 awesomeleftleg8q = MechPart("Awesome LL", 33, 17, "Hip", "Upper Leg", "Lower Leg", "Foot", copy.deepcopy(heatsink), copy.deepcopy(heatsink))
@@ -654,6 +751,7 @@ awesome8q = Battlemech("Awesome 8Q", awesomehead8q, awesomeleftarm8q, awesomerig
 
 
 def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=None, target=None):
+    target.turn+=0.00000001
     range = int(range)
     skill = int(skill)
     if shooter.hasfired == True:
@@ -686,6 +784,9 @@ def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=N
     #print(rmod, roll, hittarget, range, shooter.name, target.tmm, movemod, skill)
     if roll >= hittarget:
         #print("Hit with " + shooter.name + "!")
+        if hasattr(shooter, 'cluster') and shooter.cluster != None:
+            docluster(shooter.dmg, shooter, firingmech, target)
+            return
         hitloc = RollLocation()
         #print(shooter.dmg, "damage to enemy", hitloc[0] + "!")
         loc = hitloc[0]
@@ -717,6 +818,8 @@ def crit(target, critnum, mek):
     times = 0
     z=0
     while times < critnum:
+        mek.turn +=0.0000000001
+        loc = target.name.lower()[-2:]
         #print(z)
         if target.isdestroyed:
             critoverflow = critnum-times
@@ -741,6 +844,8 @@ def crit(target, critnum, mek):
                 mek.isdead = True
                 mek.causeofdeath = "HKill"
                 return
+            thing = loc + " " + a
+            mek.motives[thing] = mek.turn
             setattr(target, location, None)
             times=times+1
             z += 1
@@ -768,6 +873,40 @@ def crit(target, critnum, mek):
             setattr(target, location, None)
             continue
     crit(dooverflow(target, mek), (critoverflow), mek)
+
+def docluster(dmg=0, weapon=None, firingmech=None, target=None):
+    roll = random.randint(1, 6) + random.randint(1, 6)
+    roll+=weapon.clustermod
+    if weapon.artemis4: roll +=2
+    if weapon.artemis5: roll +=3
+    if roll > 12: roll = 12
+    if weapon.streak:
+        roll = 12
+    cluster = "a"
+    ldict = {}
+    exec(f"cluster = clust{weapon.cluster}", globals(), ldict)
+    cluster = ldict['cluster']
+    print(cluster)
+    roll -=2
+    print(cluster[roll] // weapon.grouping)
+    hitloc = RollLocation()
+    loc = hitloc[0]
+    loc = loc[-2:].lower()
+    loc = getattr(target, loc)
+    weapon.hit = True
+    for i in range(cluster[roll]//weapon.grouping):
+        hitloc = RollLocation()
+        loc = hitloc[0]
+        loc = loc[-2:].lower()
+        loc = getattr(target, loc)
+        print(f"One missile from {weapon.name} hit target's {loc.name}!")
+        target.resolvedamage((dmg*weapon.grouping), loc, hitloc[1])
+    if cluster[roll]%weapon.grouping != 0:
+        hitloc = RollLocation()
+        loc = hitloc[0]
+        loc = loc[-2:].lower()
+        loc = getattr(target, loc)
+        target.resolvedamage(int(dmg * cluster[roll]%weapon.grouping), loc, hitloc[1])
 
 def dooverflow(part, target=None):
     if part.name.lower()[-2:] == "hd":
@@ -833,10 +972,11 @@ testsubject2= copy.deepcopy(awesome8q)
 enemy = copy.deepcopy(awesome8q)
 enemy2 = copy.deepcopy(awesome8q)
 print(protagonist.lt.blasters)
-
+srm4.shoot()
 CoDs = {"HKill":0, "PKill":0, "EKill":0, "CTKill":0, "AmmoKill":0, "Survived":0}
 Turns = []
 crits = []
+endtmm = []
 dmgpershot = []
 avgdmgs = {}
 for i in range(20):
@@ -850,6 +990,8 @@ for i in range(10000):
     enemy2.pos = 0
     protagonist = copy.deepcopy(awesome8q)
     for i in range(12):
+        enemy2.turn +=1
+        protagonist.turn+=1
         enemy2.move(True)
         protagonist.move(False)
         if i == 0:
@@ -885,12 +1027,14 @@ for i in range(10000):
         if enemy2.isdead:
             #print(f"Enemy was destroyed in {i+1} turns!")
             Turns.append(i+1)
+            endtmm.append(enemy2.tmm)
             if enemy2.causeofdeath == '':
                 enemy2.causeofdeath = "CTKill"
             exec(f"CoDs[enemy2.causeofdeath] +=1")
             break
     if not enemy2.isdead:
         CoDs["Survived"] +=1
+        endtmm.append(enemy2.tmm)
     crits.append(critsthisgame)
 
 for i in range(20):
@@ -906,7 +1050,8 @@ print(f"{mean(crits)} crits per game.")
 print(f"{mean(avgdmgs.values())} damage per round!")
 print(f"{mean(dmgpershot)} average damage per hit!")
 print(CoDs)
-print(f"Killing took on average {mean(Turns)} turns! \n {stdev(Turns)}")
+print(f"Killing took on average {mean(Turns)} turns! \n with a stdev of {stdev(Turns)}")
+print(f"Average end TMM was {mean(endtmm)}")
 
 
 #EndTime = time.time()
