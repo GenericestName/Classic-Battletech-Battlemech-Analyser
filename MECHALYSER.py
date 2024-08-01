@@ -1,4 +1,5 @@
-import random, math, pathlib, copy, time
+import random, math, pathlib, copy, time, os
+from natsort import natsorted
 from statistics import mean
 from statistics import stdev
 from math import floor
@@ -34,6 +35,25 @@ clust28 = [9, 9, 11, 17, 17, 17, 17, 23, 23, 28, 28]
 clust29 = [10, 10, 12, 18, 18, 18, 18, 23, 23, 29, 29]
 clust30 = [10, 10, 12, 18, 18, 18, 18, 24, 24, 30, 30]
 clust40 = [12, 12, 18, 24, 24, 24, 24, 32, 32, 40, 40]
+
+def dooverflow(part, target=None):
+    if part.name.lower()[-2:] == "hd":
+        return "Mech Destroyed"
+    elif part.name.lower()[-2] == "l":
+        if part.name.lower()[-1] == "t":
+            return target.ct
+        else:
+            return target.lt
+    elif part.name.lower()[-2] == "r":
+        if part.name.lower()[-1] =="t":
+            return target.ct
+        else:
+            return target.rt
+    elif part.name.lower()[-2] == "c":
+        return "Mech Destroyed"
+    else:
+        print("OVERFLOW ERROR")
+        return
 
 def RollLocation(Float=True, HasCrit=False, Debug=False):
     Roll1 = random.randint(1, 6)
@@ -121,12 +141,14 @@ class MechUtility:
         self.name = name
         self.slots = slots
         self.isdamaged = isdamaged
+        self.hasexpanded = False
         self.isengine = isengine
         self.isgyro = isgyro
 
 class HeatSink:
     def __init__(self, name, sinking = 1, slots = 1, isdamaged = False):
         self.name = name
+        self.hasexpanded = False
         self.slots = slots
         self.isdamaged = isdamaged
         self.sinking = sinking
@@ -168,12 +190,13 @@ class MechPart:
         self.hasammo = False
         self.ammoslots = []
         self.qdir = list(a for a in dir(self) if not a.startswith('__'))
-        self.multislot()
-        self.listweps()
-        self.slotshit = []
+        self.slotqdir = natsorted(list(a for a in dir(self) if a.startswith("slot")))
+        #self.multislot()
+        #self.listweps()
+        self.slshit = []
 
     def listweps(self):
-        for attr in self.qdir:
+        for attr in self.slotqdir:
             attrvalue = getattr(self, attr)
             if isinstance(attrvalue, Weapon):
                 self.blasters.append(attr)
@@ -183,25 +206,59 @@ class MechPart:
                 self.hasammo = True
         #print(self.ammoslots)
 
-    def multislot(self):
+    def multislot(self, newdic={}):
         #if isinstance(self, MechPartBig):
            # return
         slotsdic = {}
-        for attr_name in self.qdir:
-            if not attr_name.startswith("__") and not attr_name == "structure":
+        overflowdic = {}
+        for attr_name in self.slotqdir:
+            if len(newdic)==0:
                 attrvalue = (getattr(self, attr_name))
-                if isinstance(attrvalue, Weapon) and getattr(attrvalue, "slots") > 1 or isinstance(attrvalue, MechUtility) and getattr(attrvalue, "slots") > 1:
+                if isinstance(attrvalue, Weapon) or isinstance(attrvalue, MechUtility) and getattr(attrvalue, "slots") > 1 and getattr(attrvalue, "hasexpanded", False):
                     #print(f"{attr_name} is {attrvalue.name}")
                     slotsdic[attr_name] = attrvalue.slots
         if not len(slotsdic) == 0:
             for key, value in slotsdic.items():
                 slotnum = int(key[4:])
+                sl = getattr(self, key)
+                xp = getattr(sl, "hasexpanded")
+                if xp:
+                    continue
                 for i in range((slotnum) + 1, slotnum + int(value)):
                     higherslotname = f"slot{i}"
-                    if getattr(self, higherslotname) == None:
-                        setattr(self, higherslotname, getattr(self, key))
-                        attrvalue = getattr(self, higherslotname)
-                        #print(f"{higherslotname} of {self.name} is now bound to that {attrvalue.name}!")
+                    try:
+                        if getattr(self, higherslotname) == None or (getattr(self, higherslotname) == getattr(self, key) and not getattr(self, higherslotname)):
+                            setattr(self, higherslotname, getattr(self, key))
+                            attrvalue = getattr(self, higherslotname)
+                            #wepsadded.append(attrvalue)
+                            attrvalue.hasexpanded = True
+                            #print(f"{higherslotname} of {self.name} is now bound to that {attrvalue}!")
+                    except AttributeError:
+                        o = slotnum+int(value)-1-len(self.slotqdir)
+                        #print(o)
+                        #
+                        a = getattr(self, key)
+                        #print(a)
+                        overflowdic[a] = o
+        if len(newdic) != 0:
+            for key, value in newdic.items():
+                slotstoadd = []
+                for idx, attr in enumerate(self.slotqdir):
+                    slotnum = idx+1
+                    aval = getattr(self, attr)
+                    if aval is None or (aval.name == key.name and aval != key):
+                        for i in range(value):
+                            add = f"slot{slotnum + i}"
+                            if add not in slotstoadd:
+                                slotstoadd.append(add)
+                        break
+                    else: continue
+                for slot in slotstoadd:
+                    setattr(self, slot, key)
+                    a = getattr(self, slot)
+                    setattr(a, "hasexpanded", True)
+
+        return overflowdic
 
 
     def TakeDamage(self, dmg, hascrit=False, mekself=None):
@@ -266,13 +323,15 @@ class MechPartBig(MechPart):
         self.slot11 = slot11
         self.slot12 = slot12
         self.blasters = []
-        self.slotshit = []
+        self.slshit = []
         self.hasammo = False
         self.ammoslots = []
         self.hasweps = False
         self.qdir = list(a for a in dir(self) if not a.startswith('__'))
-        self.multislot()
-        self.listweps()
+        self.slotqdir = list(a for a in dir(self) if a.startswith("slot"))
+        self.slotqdir = natsorted(self.slotqdir)
+        #self.multislot()
+        #self.listweps()
 
     '''def multislot(self):
         slotsdic = {}
@@ -309,6 +368,7 @@ class Weapon(object):
         self.mrange = mrange
         self.lrange = lrange
         self.dmg = dmg
+        self.hasexpanded = False
         self.heat = heat
         self.ratio = 0
         self.BV = BV
@@ -338,6 +398,7 @@ class Missile(Weapon):
         #super.__init__(self, name, srange, mrange, lrange, dmg, heat, damage_type, BV, slots, targetmod, minrange, ammo, cluster)
         self.artemis4 = artemis4
         self.artemis5 = artemis5
+        self.hasexpanded = False
         self.streak = streak
         self.grouping = grouping
         self.cluster = cluster
@@ -349,6 +410,7 @@ class Autocannon(Weapon):
         self.name = name
         self.minrange = minrange
         self.srange = srange
+        self.hasexpanded = False
         self.mrange = mrange
         self.lrange = lrange
         self.dmg = dmg
@@ -417,9 +479,39 @@ class Battlemech:
         self.qdir = list(a for a in dir(self) if not a.startswith('__'))
         self.hiphits = 0
         self.sinkingcalculator()
-        self.wepsandammogetter()
+        self.parts = ["la", "ra", "ll", "rl", "rt", "lt", "ct"]
+        #self.wepsandammogetter()
         self.motives = {}
         self.turn = 0
+        self.multislot()
+
+    def multislot(self):
+        larm = self.la.multislot()
+        rarm = self.ra.multislot()
+        lleg = self.ll.multislot()
+        rleg = self.rl.multislot()
+        lls = [larm, lleg]
+        rls = [rarm, rleg]
+        for i in lls:
+            if len(i) != 0:
+                self.lt.multislot(i)
+        for i in rls:
+            if len(i) != 0:
+                self.lt.multislot(i)
+        lefttorso = self.lt.multislot()
+        righttorso = self.rt.multislot()
+        tls = [righttorso, lefttorso]
+        for i in tls:
+            if len(i) !=0:
+                self.ct.multislot(i)
+        a=self.ct.multislot()
+        if len(a)!=0:
+            raise(ValueError, "CT Can't multislot into something else! Muy problema!")
+        for part in self.parts:
+            #part = getattr(self, i)
+            exec(f"self.{part}.listweps()")
+        self.wepsandammogetter()
+
 
     def motivecalc(self):
         hiphits = 0
@@ -512,12 +604,13 @@ class Battlemech:
                     wep = f'{attrval.name.lower()[-2:]} {shots}'
                     if wep not in self.weplist:
                         self.weplist.append(wep)
+                #print(self.weplist)
                     #exec(f"self.weplist.append('{attrval.name.lower()[-2:]} {shots}')")
             if isinstance(attrval, MechPart) and getattr(attrval, 'hasammo') and not getattr(attrval, 'isdestroyed'):
                 for i in attrval.ammoslots:
                     ammo = getattr(attrval, i)
                     if not ammo.isdamaged:
-                        print(ammo)
+                        #print(ammo)
                         exec(f"self.ammolist.append('{attrval.name.lower()[-2:]} {i}')")
         #self.weplist = [attr for attr in dir(self) if isinstance(getattr(self, attr), MechPart) and getattr(getattr(self, attr),'hasweps') and not getattr(getattr(self, attr), 'isdestroyed')]
 
@@ -629,14 +722,18 @@ class Battlemech:
         self.heatresolution()
 
     def sinkingcalculator(self):
+        sinkslist = []
         heatsinkssinking = 0
         for attr in self.qdir:
             attrval = getattr(self, attr)
-            if isinstance(attrval, MechPart) and not getattr(attrval, 'isdestroyed'):
-                for attrvals in dir(attrval):
+            if isinstance(attrval, MechPart) or isinstance(attrval, MechPartBig) and not getattr(attrval, 'isdestroyed'):
+                for attrvals in attrval.slotqdir:
                     attrvalue = (getattr(attrval, attrvals))
-                    if isinstance(attrvalue, HeatSink) and not attrvalue.isdamaged:
+                    if isinstance(attrvalue, HeatSink) and not attrvalue.isdamaged and not attrvalue in sinkslist:
+                        #print(attrvals, attr)
+                        sinkslist.append(attrvalue)
                         heatsinkssinking += attrvalue.sinking
+        #print(sinkslist)
         self.sinking = self.basesinking + heatsinkssinking - (self.gyrohits * 5)
 
     def weightclasscalc(self):
@@ -684,16 +781,19 @@ isdoubleheatsink = HeatSink("Double Heatsink", 2, 3)
 clandoubleheatsink = HeatSink("Double Heatsink", 2, 2)
 fusengine = MechUtility("Fusion Engine", 1, False, True, )
 gyro = MechUtility("Gyro", 1, False, False, True)
+MechUtils = {"Gyro":gyro, "Fusion Engine":fusengine, "Heat Sink":heatsink, "ISDouble Heat Sink":isdoubleheatsink, "CLDoubleHeatSink (omnipod)":clandoubleheatsink, "CLDoubleHeatSink":clandoubleheatsink}
 
 #Ammo Bins
 mgammo = AmmoBin("MG Ammo", 200, 1, True, 2)
+mghalfammo = AmmoBin("MG Ammo", 100, 1, True, 2)
 ac2ammo = AmmoBin("AC2 Ammo", 45, 1, True, 2)
 ac5ammo = AmmoBin("AC5 Ammo", 20, 1, True, 5)
 ac10ammo = AmmoBin("AC10 Ammo", 10, 1, True, 10)
 ac20ammo = AmmoBin("AC20 Ammo", 5, 1, True, 20)
 srm2ammo = AmmoBin("SRM2 Ammo", 50, 1, True, 4)
 srm4ammo = AmmoBin("SRM4 Ammo", 25, 1, True, 8)
-srm6ammo = AmmoBin("SRM6 Ammo", 12, 1, True, 12)
+srm6ammo = AmmoBin("SRM6 Ammo", 15, 1, True, 12)
+MechAmmo = {"IS Ammo SRM-6":srm6ammo, "IS Ammo SRM-4":srm4ammo, "IS Ammo SRM-2":srm2ammo, "IS Ammo MG - Full":mgammo, "IS Ammo MG - Half":mghalfammo}
 
 #Lasers
 largelaser = Weapon("Large Laser", 5, 10, 15, 8, 8, "DE", 123, 2)
@@ -714,15 +814,18 @@ clanpsmalllaser = Weapon("Small Pulse Laser", 2, 4, 6, 3, 2, "P", 24, 1, (-2))
 clanersmalllaser = Weapon("ER Small Laser", 2, 4, 6, 5, 2, "DE", 31)
 isersmalllaser = Weapon("ER Small Laser", 2, 4, 5, 3, 2, "DE", 17)
 erpsmalllaser = Weapon("ER Small Pulse Laser", 2, 4, 6, 5, 3, None, 36, 1, (-1))
+Lasers = {"Large Laser":largelaser,"ISLarge Laser":largelaser, "Medium Laser":mediumlaser, "Small Laser":smalllaser, "ISSmallLaser":smalllaser, "ISMediumLaser":mediumlaser,"ISLargePulseLaser":isplargelaser}
 
 #PPCs
 ppc = Weapon("PPC", 6, 12, 18, 10, 10, "DE", 176, 3, 0, 3)
 iserppc = Weapon("ERPPC", 7, 14, 23, 10, 15, "DE", 228, 3, 0, 0)
 clanerppc = Weapon("ERPPC", 7, 14, 23, 15, 15, "DE", 412, 2, 0, 0)
 heavyppc = Weapon("Heavy PPC", 6, 12, 18, 15, 15, "DE", 317, 4, 0, 3)
+PPCs = {"PPC":ppc, "CLERPPC (omnipod)":clanerppc, "CLERPPC":clanerppc, "ISERPPC":iserppc}
 
 #Ballistics
 machinegun = Autocannon("Machine Gun", 1, 2, 3, 2, 0, "AI", 20, 1, 0, 0, "MG Ammo")
+Ballistics = {"Machine Gun":machinegun}
 
 #Missiles
 srm2 = Missile("SRM 2", 3, 6, 9, 2, 2, "Cluster", 21, 1, 0, 0, "SRM2 Ammo", 2, 0, 1, False, False)
@@ -731,6 +834,8 @@ clanssrm2 = Missile("Streak SRM 2", 4, 8, 12, 2, 2, "Cluster", 40, 1, 0, 0, "SRM
 srm4 = Missile("SRM 4", 3, 6, 9, 2, 3, "Cluster", 39, 1, 0, 0, "SRM4 Ammo", 4, 0, 1)
 isssrm4 = Missile("Streak SRM 4", 3, 6, 9, 2, 3, "Cluster", 59, 1, 0, 0, "SRM4 Ammo", 4, 0, 1, True)
 clanssrm4 = Missile("Streak SRM 4", 4, 8, 12, 2, 3, "Cluster", 59, 1, 0, 0, "SRM4 Ammo", 4, 0, 1, True)
+issrm6 = Missile("SRM 6", 3, 6, 9, 2, 4, "Cluster", 59, 2, 0, 0, "SRM6 Ammo", 6, 0, 1)
+MechMissiles = {"SRM 2":srm2, "SRM 4":srm4, "SRM 6":issrm6}
 #'Mech Bits
 awesomehead8q = MechPart("Awesome HD", 9, 3, "Life Support", "Sensors", "Cockpit", copy.deepcopy(smalllaser), "Sensors", "Life Support", False, True)
 awesomeleftleg8q = MechPart("Awesome LL", 33, 17, "Hip", "Upper Leg", "Lower Leg", "Foot", copy.deepcopy(heatsink), copy.deepcopy(heatsink))
@@ -746,9 +851,9 @@ thunderbolt5srightarm = MechPartBig("Thunderbolt RA", 20, 0, 10, "Shoulder", "Up
 genericmechwarrior = Pilot("David B.", 5, 2)
 
 #Battlemechs
-awesome8q = Battlemech("Awesome 8Q", awesomehead8q, awesomeleftarm8q, awesomerightarm8q, awesomeleftleg8q, awesomerightleg8q, awesomerighttorso8q, awesomelefttorso8q, awesomecentretorso8q, genericmechwarrior, 3, 80)
+#awesome8q = Battlemech("Awesome 8Q", awesomehead8q, awesomeleftarm8q, awesomerightarm8q, awesomeleftleg8q, awesomerightleg8q, awesomerighttorso8q, awesomelefttorso8q, awesomecentretorso8q, genericmechwarrior, 3, 80)
 
-
+mechbits = [MechUtils, PPCs, Lasers, MechMissiles, MechAmmo, Ballistics]
 
 def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=None, target=None):
     target.turn+=0.00000001
@@ -772,7 +877,7 @@ def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=N
             #print(shooter)
             hadammo = firingmech.useammo(shooter)
             if not hadammo:
-                print("Click!")
+                #print("Click!")
                 return
         else:
             raise(f"{shooter.name} has attr ammo, but Ammo is set to None!")
@@ -886,9 +991,9 @@ def docluster(dmg=0, weapon=None, firingmech=None, target=None):
     ldict = {}
     exec(f"cluster = clust{weapon.cluster}", globals(), ldict)
     cluster = ldict['cluster']
-    print(cluster)
+    #print(cluster)
     roll -=2
-    print(cluster[roll] // weapon.grouping)
+    #print(cluster[roll] // weapon.grouping)
     hitloc = RollLocation()
     loc = hitloc[0]
     loc = loc[-2:].lower()
@@ -899,7 +1004,7 @@ def docluster(dmg=0, weapon=None, firingmech=None, target=None):
         loc = hitloc[0]
         loc = loc[-2:].lower()
         loc = getattr(target, loc)
-        print(f"One missile from {weapon.name} hit target's {loc.name}!")
+        #print(f"One missile from {weapon.name} hit target's {loc.name}!")
         target.resolvedamage((dmg*weapon.grouping), loc, hitloc[1])
     if cluster[roll]%weapon.grouping != 0:
         hitloc = RollLocation()
@@ -908,24 +1013,7 @@ def docluster(dmg=0, weapon=None, firingmech=None, target=None):
         loc = getattr(target, loc)
         target.resolvedamage(int(dmg * cluster[roll]%weapon.grouping), loc, hitloc[1])
 
-def dooverflow(part, target=None):
-    if part.name.lower()[-2:] == "hd":
-        return "Mech Destroyed"
-    elif part.name.lower()[-2] == "l":
-        if part.name.lower()[-1] == "t":
-            return target.ct
-        else:
-            return target.lt
-    elif part.name.lower()[-2] == "r":
-        if part.name.lower()[-1] =="t":
-            return target.ct
-        else:
-            return target.rt
-    elif part.name.lower()[-2] == "c":
-        return "Mech Destroyed"
-    else:
-        print("OVERFLOW ERROR")
-        return
+
 def targetcalc(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=None, target=None):
     if range <= shooter.minrange:
         rmod = (shooter.minrange - range)+1
@@ -967,12 +1055,10 @@ def targetcalc(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firing
         return 0.000001
 
 
-protagonist = copy.deepcopy(awesome8q)
-testsubject2= copy.deepcopy(awesome8q)
-enemy = copy.deepcopy(awesome8q)
-enemy2 = copy.deepcopy(awesome8q)
-print(protagonist.lt.blasters)
-srm4.shoot()
+#protagonist = copy.deepcopy(awesome8q)
+#testsubject2= copy.deepcopy(awesome8q)
+#enemy = copy.deepcopy(awesome8q)
+#enemy2 = copy.deepcopy(awesome8q)
 CoDs = {"HKill":0, "PKill":0, "EKill":0, "CTKill":0, "AmmoKill":0, "Survived":0}
 Turns = []
 crits = []
@@ -982,42 +1068,174 @@ avgdmgs = {}
 for i in range(20):
     exec(f"turn{i+1}dmg = []")
 print(time.time()-StartTime)
-for i in range(10000):
+
+def partgen(part, data):
+    if not isinstance(part, str): raise(TypeError, "Error in partgen Function, part is not str")
+    #print(data)
+    partslots = {}
+    global mechbits
+    mtbits = ["-Empty-", '-Empty-']
+    for idx, item in enumerate(data):
+        #print(idx, item)
+        slnum = idx + 1
+        slnum = "slot" + str(slnum)
+        i=item
+        if not slnum in partslots.keys():
+            for dicts in mechbits:
+                for key, value in dicts.items():
+                    if key.lower() == item.lower():
+                        partslots.update({slnum : copy.deepcopy(value)})
+                        if value.slots > 1:
+                            if (int(slnum[4:])+value.slots)-len(data) > 0:
+                                print("There's gonna be some overflow here!")
+                            for i in range(value.slots-1):
+                                slnumfutur = "slot" +(str(idx+i+2))
+                                partslots.update({slnumfutur:None})
+            if not slnum in partslots.keys():
+                if i in mtbits:
+                    partslots[slnum] = None
+                else:
+                    partslots[slnum] = i
+            partslots["Part"] = part
+    #print(partslots["slot3"] is partslots["slot4"])
+    #print(partslots)
+    return partslots
+def mechgen(name, file, isprotag=False):
+    strt = time.time()
+    global mechbits
+    mtbits = ["-Empty-"]
+    struc20 = [6, 5, 3, 4]
+    struc25 = [8, 6, 4, 6]
+    struc30 = [10, 7, 5, 7]
+    struc35 = [11, 8, 6, 8]
+    struc40 = [12, 10, 6, 10]
+    struc45 = [14, 11, 7, 11]
+    struc50 = [16, 12, 8, 12]
+    struc55 = [18, 13, 9, 13]
+    struc60 = [20, 14, 10, 14]
+    struc65 = [21, 15, 10, 15]
+    struc70 = [22, 15, 11, 15]
+    struc75 = [23, 16, 12, 16]
+    struc80 = [25, 17, 13, 17]
+    struc85 = [27, 18, 14, 18]
+    struc90 = [29, 19, 15, 19]
+    struc95 = [30, 20, 16, 20]
+    struc100 = [31, 21, 17, 21]
+    strucdict = {100:struc100, 95:struc95, 90:struc90, 85:struc85, 80:struc80, 75:struc75, 70:struc70, 65:struc65, 60:struc60, 55:struc55, 50:struc50, 45:struc45, 40:struc40, 35:struc35, 30:struc30, 25:struc25, 20:struc20}
+    armdict = {}
+    hdslots = {}
+    mechfile = open(file, "r")
+    mechdata = mechfile.readlines()
+    if not mechdata[4] == "Config:Biped\n":
+        raise Exception("Only Battlemechs please, no quads or tris!")
+    mechname = mechdata[2].removesuffix("\n")
+    for idx, item in enumerate(mechdata):
+        pos = mechdata.index(item)
+        if item.lower().startswith("mass"):
+            tonnage = int(item.removesuffix("\n")[-2:])
+            #print(tonnage)
+            struc=strucdict[tonnage]
+            #print(struc)
+        if item.lower().startswith("armor"):
+            print(item)
+            for i in range(11):
+                arm = mechdata[pos+i+1].removesuffix("\n")
+                armdict[mechdata[pos+i+1][0:3].strip().lower()] = arm[-2:]
+            for key, value in armdict.items():
+                a=value.find(":")
+                if a != -1:
+                    armdict[key] = value[a+1:]
+            #print(armdict)
+        if item.lower().startswith("head"):
+            partdata = [mechdata[pos+i+1][0:-1] for i in range(6)]
+            head = partgen("Head", partdata)
+            #print(f"{mechname} head is {head}")
+        if item.lower().startswith("center torso"):
+            partdata = [mechdata[idx+i+1][0:-1] for i in range(12)]
+            ct = partgen("Center Torso", partdata)
+            #print(f"{mechname} ct is {ct}")
+        if item.lower().startswith("right torso"):
+            partdata = [mechdata[idx+i+1][0:-1] for i in range(12)]
+            rt = partgen("Right Torso", partdata)
+            #print(f"{mechname} rt is {rt}")
+        if item.lower().startswith("left torso"):
+            partdata = [mechdata[idx + i + 1][0:-1] for i in range(12)]
+            lt = partgen("Left Torso", partdata)
+            #print(f"{mechname} lt is {lt}")
+        if item.lower().startswith("left arm"):
+            partdata = [mechdata[idx + i + 1][0:-1] for i in range(12)]
+            la = partgen("Left Arm", partdata)
+            #print(f"{mechname} la is {la}")
+        if item.lower().startswith("right arm"):
+            partdata = [mechdata[idx+i+1][0:-1] for i in range(12)]
+            ra = partgen("Right Arm", partdata)
+            #print(f"{mechname} ra is {ra}")
+        if item.lower().startswith("left leg"):
+            partdata = [mechdata[idx + i + 1][0:-1] for i in range(6)]
+            ll = partgen("Left Leg", partdata)
+            #print(f"{mechname} ll is {ll}")
+        if item.lower().startswith("right leg"):
+            partdata = [mechdata[idx+i+1][0:-1] for i in range(6)]
+            rl = partgen("Right Leg", partdata)
+            #print(f"{mechname} rl is {rl}")
+        if item.lower().startswith("walk mp"):
+            #print(item[8:])
+            walk = int(item[8:])
+        if item.startswith("model:"):
+            mechname = item[6:-1]
+            print(mechname)
+    if isprotag:
+        print("Please enter your 'Mech's BV")
+        while isprotag:
+            BV = input("> ")
+            try:
+                BV = int(BV)
+                break
+            except ValueError:
+                print("Please make sure it's just a plain int")
+    else:
+        BV = 20
+    #print(armdict)
+    mechhead = MechPart(f"{mechname} HD", armdict["hd"], 3, head["slot1"], head["slot2"], head["slot3"], head["slot4"], head["slot5"], head["slot6"], False, True)
+    mechll = MechPartBig(f"{mechname} LL", armdict["ll"], struc[3], ll["slot1"], ll["slot2"], ll["slot3"], ll["slot4"],ll["slot5"], ll["slot6"])
+    mechrl = MechPartBig(f"{mechname} RL", armdict["rl"], struc[3], rl["slot1"], rl["slot2"], rl["slot3"], rl["slot4"],rl["slot5"], rl["slot6"])
+    mechla = MechPartBig(f"{mechname} LA", armdict["la"], 0, struc[2], la["slot1"], la["slot2"], la["slot3"], la["slot4"], la["slot5"], la["slot6"], la["slot7"], la["slot8"], la["slot9"], la["slot10"], la["slot11"], la["slot12"])
+    mechra = MechPartBig(f"{mechname} RA", armdict["ra"], 0, struc[2], ra["slot1"], ra["slot2"], ra["slot3"], ra["slot4"],ra["slot5"], ra["slot6"], ra["slot7"], ra["slot8"], ra["slot9"], ra["slot10"], ra["slot11"], ra["slot12"])
+    mechlt = MechPartBig(f"{mechname} LT", armdict["lt"], armdict["rtl"], struc[1], lt["slot1"], lt["slot2"], lt["slot3"], lt["slot4"],lt["slot5"], lt["slot6"], lt["slot7"], lt["slot8"], lt["slot9"], lt["slot10"], lt["slot11"], lt["slot12"])
+    mechrt = MechPartBig(f"{mechname} RT", armdict["rt"], armdict["rtr"], struc[1], rt["slot1"], rt["slot2"], rt["slot3"], rt["slot4"],rt["slot5"], rt["slot6"], rt["slot7"], rt["slot8"], rt["slot9"], rt["slot10"], rt["slot11"], rt["slot12"])
+    mechct = MechPartBig(f"{mechname} CT", armdict["ct"], armdict["rtc"], struc[0], ct["slot1"], ct["slot2"], ct["slot3"], ct["slot4"], ct["slot5"], ct["slot6"], ct["slot7"], ct["slot8"], ct["slot9"], ct["slot10"], ct["slot11"], ct["slot12"])
+    mech = Battlemech(mechname, mechhead, mechla, mechra, mechll, mechrl, mechrt, mechlt, mechct, genericmechwarrior, walk, tonnage)
+    print(f"Initializing {mechname} took {time.time()-strt} seconds")
+    return mech
+
+    #print(mechdata)
+files = os.listdir()
+for i in files:
+    if i.lower().endswith("protagonist.mtf"):
+        protagonist = i
+    if i.strip().lower().endswith("attacker.mtf"):
+        attacker = i
+    if i.lower().endswith("target.mtf"):
+        target = i
+Bingus = mechgen("Apples", attacker, False)
+print(Bingus.name)
+print(Bingus.weplist)
+
+
+'''for i in range(1):
     critsthisgame = 0
     #print(i)
     if i % 100 == 0: print(i)
     enemy2 = copy.deepcopy(awesome8q)
     enemy2.pos = 0
     protagonist = copy.deepcopy(awesome8q)
+    poslist = [21, 18, 15, 14, 12, 10, 9, 7, 6, 5, 3, 1]
     for i in range(12):
         enemy2.turn +=1
         protagonist.turn+=1
         enemy2.move(True)
         protagonist.move(False)
-        if i == 0:
-            protagonist.pos = 21
-        elif i == 1:
-            protagonist.pos = 18
-        elif i == 2:
-            protagonist.pos = 15
-        elif i == 3:
-            protagonist.pos = 14
-        elif i == 4:
-            protagonist.pos = 12
-        elif i == 5:
-            protagonist.pos = 10
-        elif i == 6:
-            protagonist.pos = 9
-        elif i == 7:
-            protagonist.pos = 7
-        elif i == 8:
-            protagonist.pos = 6
-        elif i == 9:
-            protagonist.pos = 5
-        elif i == 10:
-            protagonist.pos = 3
-        elif i == 11:
-            protagonist.pos = 1
+        protagonist.pos = poslist[i]
         #print(f"Turn {i+1}")
         protagonist.barrage(enemy2)
         #print(enemy2.heat)
@@ -1055,4 +1273,4 @@ print(f"Average end TMM was {mean(endtmm)}")
 
 
 #EndTime = time.time()
-print(f"The program took {int(time.time()-StartTime)} seconds!")
+print(f"The program took {int(time.time()-StartTime)} seconds!")'''
