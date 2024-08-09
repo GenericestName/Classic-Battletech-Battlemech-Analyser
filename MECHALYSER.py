@@ -137,28 +137,31 @@ def docriticals():
         return 0
 class MechUtility:
 
-    def __init__(self, name, slots=1, isdamaged=False, isengine=False, isgyro=False):
+    def __init__(self, name, slots=1, isdamaged=False, isengine=False, isgyro=False, ids=[]):
         self.name = name
         self.slots = slots
+        self.ids = ids
         self.isdamaged = isdamaged
         self.hasexpanded = False
         self.isengine = isengine
         self.isgyro = isgyro
 
 class HeatSink:
-    def __init__(self, name, sinking = 1, slots = 1, isdamaged = False):
+    def __init__(self, name, sinking = 1, slots = 1, isdamaged = False, ids=[]):
         self.name = name
         self.hasexpanded = False
         self.slots = slots
+        self.ids = ids
         self.isdamaged = isdamaged
         self.sinking = sinking
 
 class AmmoBin(MechUtility):
-    def __init__(self, name, ammonum, slots=1, isexplosive = True, damageperammo = 2, isdamaged=False):
+    def __init__(self, name, ammonum, slots=1, isexplosive = True, damageperammo = 2, isdamaged=False, ids=[]):
         self.name = name
         self.slots = slots
         self.ammonum = int(ammonum)
         self.isdamaged = isdamaged
+        self.ids = ids
         self.isexplosive = isexplosive
         self.damageperammo = damageperammo
         self.location = ()
@@ -361,7 +364,7 @@ class MechPartBig(MechPart):
         print(f"{higherslotname} in {self.name} is now {attrvalue.name}!")'''
 class Weapon(object):
 
-    def __init__(self, name, srange, mrange, lrange, dmg, heat, damage_type = None, BV=0, slots=1, targetmod=0, minrange=0, isexplosive=False, xplodmg=0):
+    def __init__(self, name, srange, mrange, lrange, dmg, heat, damage_type = None, BV=0, slots=1, targetmod=0, minrange=0, isexplosive=False, xplodmg=0, ids=[]):
         self.name = name
         self.minrange = minrange
         self.srange = srange
@@ -380,6 +383,7 @@ class Weapon(object):
         self.ratiocalc(dmg, heat)
         self.isdamaged = False
         self.hit = False
+        self.ids = ids
     def shoot(self):
         if self.hasfired:
             #print("Fuc")
@@ -394,8 +398,10 @@ class Weapon(object):
         except ZeroDivisionError:
             self.ratio=0
 class Missile(Weapon):
-    def __init__ (self, name, srange, mrange, lrange, dmg, heat, damage_type = None, BV=0, slots = 1, targetmod =0, minrange=0, ammo=None, cluster=None, clustermod = 0, grouping=None, streak=False, artemis4=False, artemis5=False):
-        #super.__init__(self, name, srange, mrange, lrange, dmg, heat, damage_type, BV, slots, targetmod, minrange, ammo, cluster)
+    def __init__ (self, name, srange, mrange, lrange, dmg, heat, damage_type = None, BV=0, slots = 1, targetmod =0, minrange=0, ammo=None, cluster=None, clustermod = 0, grouping=None, streak=False, artemis4=False, artemis5=False, ids=None):
+        super().__init__(name, srange, mrange, lrange, dmg, heat)
+        if ids == None:
+            self.ids = []
         self.artemis4 = artemis4
         self.artemis5 = artemis5
         self.hasexpanded = False
@@ -403,10 +409,10 @@ class Missile(Weapon):
         self.grouping = grouping
         self.cluster = cluster
         self.clustermod = clustermod
-        super().__init__(name, srange, mrange, lrange, dmg, heat)
+        self.ids = ids
 
 class Autocannon(Weapon):
-    def __init__(self, name, srange, mrange, lrange, dmg, heat, damage_type = None, BV=0, slots=1, targetmod=0, minrange=0, ammo = None, cluster = None, isexplosive=False, xplodmg=0, grouping = None):
+    def __init__(self, name, srange, mrange, lrange, dmg, heat, damage_type = None, BV=0, slots=1, targetmod=0, minrange=0, ammo = None, cluster = None, isexplosive=False, xplodmg=0, grouping = None, ids=[]):
         self.name = name
         self.minrange = minrange
         self.srange = srange
@@ -427,6 +433,7 @@ class Autocannon(Weapon):
         self.ratiocalc(dmg, heat)
         self.isdamaged = False
         self.hit = False
+        self.ids = ids
     def shoot(self):
         self.hasfired = True
         return self.dmg, self.ammo, self.cluster
@@ -776,66 +783,91 @@ class Battlemech:
 
 
 #Mech Utility
-heatsink = HeatSink("Single Heatsink")
-isdoubleheatsink = HeatSink("Double Heatsink", 2, 3)
-clandoubleheatsink = HeatSink("Double Heatsink", 2, 2)
-fusengine = MechUtility("Fusion Engine", 1, False, True, )
-gyro = MechUtility("Gyro", 1, False, False, True)
-MechUtils = {"Gyro":gyro, "Fusion Engine":fusengine, "Heat Sink":heatsink, "ISDouble Heat Sink":isdoubleheatsink, "CLDoubleHeatSink (omnipod)":clandoubleheatsink, "CLDoubleHeatSink":clandoubleheatsink}
+heatsink = HeatSink("Single Heatsink", ids=["Heat Sink"])
+isdoubleheatsink = HeatSink("Double Heatsink", 2, 3, ids=["ISDoubleHeatSink","IS Double Heat Sink","ISDouble Heat Sink"])
+clandoubleheatsink = HeatSink("Double Heatsink", 2, 2, ids=["CLDoubleHeatSink","Clan Double Heat Sink","CLDouble Heat Sink"])
+fusengine = MechUtility("Fusion Engine", 1, False, True, ids=["Fusion Engine"])
+gyro = MechUtility("Gyro", 1, False, False, True, ids=["Gyro"])
+#MechUtils = {"Gyro":gyro, "Fusion Engine":fusengine, "Heat Sink":heatsink, "ISDouble Heat Sink":isdoubleheatsink, "CLDoubleHeatSink (omnipod)":clandoubleheatsink, "CLDoubleHeatSink":clandoubleheatsink}
+MechUtils=[heatsink, isdoubleheatsink, clandoubleheatsink, fusengine, gyro]
 
 #Ammo Bins
-mgammo = AmmoBin("MG Ammo", 200, 1, True, 2)
-mghalfammo = AmmoBin("MG Ammo", 100, 1, True, 2)
-ac2ammo = AmmoBin("AC2 Ammo", 45, 1, True, 2)
-ac5ammo = AmmoBin("AC5 Ammo", 20, 1, True, 5)
-ac10ammo = AmmoBin("AC10 Ammo", 10, 1, True, 10)
-ac20ammo = AmmoBin("AC20 Ammo", 5, 1, True, 20)
-srm2ammo = AmmoBin("SRM2 Ammo", 50, 1, True, 4)
-srm4ammo = AmmoBin("SRM4 Ammo", 25, 1, True, 8)
-srm6ammo = AmmoBin("SRM6 Ammo", 15, 1, True, 12)
-MechAmmo = {"IS Ammo SRM-6":srm6ammo, "IS Ammo SRM-4":srm4ammo, "IS Ammo SRM-2":srm2ammo, "IS Ammo MG - Full":mgammo, "IS Ammo MG - Half":mghalfammo}
-
+mgammo = AmmoBin("MG Ammo", 200, 1, True, 2, ids=["IS Ammo MG - Full","ISMG Ammo (200)","ISMG Ammo Full","IS Machine Gun Ammo"])
+mghalfammo = AmmoBin("MG Ammo", 100, 1, True, 2, ids=["IS Machine Gun Ammo - Half","IS Ammo MG - Half","ISMG Ammo (100)","ISMG Ammo Half","IS Machine Gun Ammo (1/2 ton)","Half Machine Gun Ammo"])
+ac2ammo = AmmoBin("AC2 Ammo", 45, 1, True, 2, ids=["IS Ammo AC/2","ISAC2 Ammo","IS Autocannon/2 Ammo"])
+ac5ammo = AmmoBin("AC5 Ammo", 20, 1, True, 5, ids=["IS Ammo AC/5","ISAC5 Ammo","IS Autocannon/5 Ammo"])
+ac10ammo = AmmoBin("AC10 Ammo", 10, 1, True, 10, ids=["IS Ammo AC/10","ISAC10 Ammo","IS Autocannon/10 Ammo"])
+ac20ammo = AmmoBin("AC20 Ammo", 5, 1, True, 20, ids=["IS Ammo AC/20","ISAC20 Ammo","IS Autocannon/20 Ammo"])
+gaussammo = AmmoBin("Gauss Rifle Ammo", 8, 1, False, 0, ids=["IS Gauss Ammo","IS Ammo Gauss","ISGauss Ammo","IS Gauss Rifle Ammo","ISGaussRifle Ammo","Clan Gauss Ammo","Clan Ammo Gauss","CLGauss Ammo","Clan Gauss Rifle Ammo"])
+srm2ammo = AmmoBin("SRM2 Ammo", 50, 1, True, 4, ids=["IS Ammo SRM-2","ISSRM2 Ammo","IS SRM 2 Ammo","Clan Ammo SRM-2","CLSRM2 Ammo","Clan SRM 2 Ammo"])
+srm4ammo = AmmoBin("SRM4 Ammo", 25, 1, True, 8, ids=["IS Ammo SRM-4","ISSRM4 Ammo","IS SRM 4 Ammo","Clan Ammo SRM-4","CLSRM4 Ammo","Clan SRM 4 Ammo"])
+srm6ammo = AmmoBin("SRM6 Ammo", 15, 1, True, 12, ids=["IS Ammo SRM-6","ISSRM6 Ammo","IS SRM 6 Ammo","Clan Ammo SRM-6","CLSRM6 Ammo","Clan SRM 6 Ammo"])
+ssrm2ammo = AmmoBin("Streak SRM2 Ammo", 50, 1, True, 4, ids=["IS Streak SRM 2 Ammo","IS Ammo Streak-2","ISStreakSRM2 Ammo","Clan Streak SRM 2 Ammo","Clan Ammo Streak-2","CLStreakSRM2 Ammo"])
+ssrm4ammo = AmmoBin("Streak SRM4 Ammo", 25, 1, True, 8, ids=["IS Streak SRM 4 Ammo","IS Ammo Streak-4","ISStreakSRM4 Ammo","Clan Streak SRM 4 Ammo","Clan Ammo Streak-4","CLStreakSRM4 Ammo"])
+ssrm6ammo = AmmoBin("Streak SRM6 Ammo", 15, 1, True, 12, ids=["IS Streak SRM 6 Ammo","IS Ammo Streak-6","ISStreakSRM6 Ammo","Clan Streak SRM 6 Ammo","Clan Ammo Streak-6","CLStreakSRM6 Ammo"])
+lrm5ammo = AmmoBin("LRM5 Ammo", 24, 1, True, 5, ids=["IS Ammo LRM-5","ISLRM5 Ammo","IS LRM 5 Ammo","Clan Ammo LRM-5","CLLRM5 Ammo","Clan LRM 5 Ammo"])
+lrm10ammo = AmmoBin("LRM10 Ammo", 12, 1, True, 10, ids=["IS Ammo LRM-10","ISLRM10 Ammo","IS LRM 10 Ammo","Clan Ammo LRM-10","CLLRM10 Ammo","Clan LRM 10 Ammo"])
+lrm15ammo = AmmoBin("LRM15 Ammo", 8, 1, True, 15, ids=["IS Ammo LRM-15","ISLRM15 Ammo","IS LRM 15 Ammo","Clan Ammo LRM-15","CLLRM15 Ammo","Clan LRM 15 Ammo"])
+lrm20ammo = AmmoBin("LRM20 Ammo", 6, 1, True, 20, ids=["IS Ammo LRM-20","ISLRM20 Ammo","IS LRM 20 Ammo","Clan Ammo LRM-20","CLLRM20 Ammo","Clan LRM 20 Ammo"])
+MechAmmo = [mgammo, mghalfammo, ac2ammo, ac5ammo, ac10ammo, ac20ammo, gaussammo, srm2ammo, srm4ammo, srm6ammo, ssrm2ammo, ssrm4ammo, ssrm6ammo, lrm5ammo, lrm10ammo, lrm15ammo, lrm20ammo]
 #Lasers
-largelaser = Weapon("Large Laser", 5, 10, 15, 8, 8, "DE", 123, 2)
-iserlargelaser = Weapon("ER Large Laser", 7, 14, 19, 8, 12, "DE", 163, 2)
-clanerlargelaser = Weapon("ER Large Laser", 8, 15, 25, 10, 12, "DE", 248)
-isplargelaser = Weapon("Large Pulse Laser", 3, 7, 10, 9, 10, "P", 119, 2, -2)
-clanplargelaser = Weapon("Large Pulse Laser", 6, 14, 20, 10, 10, "P", 265, 2, (-2))
-erplargelaser = Weapon("ER Large Pulse Laser", 7, 15, 23, 10, 13, "P", 272, 3, (-1))
-mediumlaser = Weapon("Medium Laser", 3, 6, 9, 5, 3, "DE", 46)
-ispmediumlaser = Weapon("Medium Pulse Laser", 2, 4, 6, 6, 4, "P", 48, 1, (-2))
-clanpmediumlaser = Weapon("Medium Pulse Laser", 4, 8, 12, 7, 4, "P", 111, 1, (-2))
-isermediumlaser = Weapon("ER Medium Laser", 4, 8, 12, 5, 5, "DE", 62)
-clanermediumlaser = Weapon("ER Medium Laser", 5, 10, 15, 7, 5, "DE", 108)
-erpmediumlaser = Weapon("ER Medium Pulse Laser", 5, 9, 14, 7, 6, "P", 117, 2, (-1))
-smalllaser = Weapon("Small Laser", 1, 2, 3, 3, 1, "DE", 9)
-ispsmalllaser = Weapon("Small Pulse Laser", 1, 2, 3, 3, 2, "P", 12, 1, (-2))
-clanpsmalllaser = Weapon("Small Pulse Laser", 2, 4, 6, 3, 2, "P", 24, 1, (-2))
-clanersmalllaser = Weapon("ER Small Laser", 2, 4, 6, 5, 2, "DE", 31)
-isersmalllaser = Weapon("ER Small Laser", 2, 4, 5, 3, 2, "DE", 17)
-erpsmalllaser = Weapon("ER Small Pulse Laser", 2, 4, 6, 5, 3, None, 36, 1, (-1))
-Lasers = {"Large Laser":largelaser,"ISLarge Laser":largelaser, "Medium Laser":mediumlaser, "Small Laser":smalllaser, "ISSmallLaser":smalllaser, "ISMediumLaser":mediumlaser,"ISLargePulseLaser":isplargelaser}
+largelaser = Weapon("Large Laser", 5, 10, 15, 8, 8, "DE", 123, 2, ids=["Large Laser","IS Large Laser","ISLargeLaser"])
+iserlargelaser = Weapon("ER Large Laser", 7, 14, 19, 8, 12, "DE", 163, 2 ,ids=["ISERLargeLaser","IS ER Large Laser"])
+clanerlargelaser = Weapon("ER Large Laser", 8, 15, 25, 10, 12, "DE", 248, ids=["CLERLargeLaser","Clan ER Large Laser"])
+isplargelaser = Weapon("Large Pulse Laser", 3, 7, 10, 9, 10, "P", 119, 2, -2, ids=["ISLargePulseLaser","IS Pulse Large Laser","IS Large Pulse Laser"])
+clanplargelaser = Weapon("Large Pulse Laser", 6, 14, 20, 10, 10, "P", 265, 2, (-2), ids=["CLLargePulseLaser","Clan Pulse Large Laser","Clan Large Pulse Laser"])
+erplargelaser = Weapon("ER Large Pulse Laser", 7, 15, 23, 10, 13, "P", 272, 3, (-1), ids=["CLERLargePulseLaser","Clan ER Pulse Large Laser","Clan ER Large Pulse Laser"])
+mediumlaser = Weapon("Medium Laser", 3, 6, 9, 5, 3, "DE", 46, ids=["Medium Laser","IS Medium Laser","ISMediumLaser"])
+ispmediumlaser = Weapon("Medium Pulse Laser", 2, 4, 6, 6, 4, "P", 48, 1, (-2), ids=["ISMediumPulseLaser","IS Pulse Med Laser","IS Medium Pulse Laser"])
+clanpmediumlaser = Weapon("Medium Pulse Laser", 4, 8, 12, 7, 4, "P", 111, 1, (-2), ids=["CLMediumPulseLaser","Clan Pulse Med Laser","Clan Medium Pulse Laser"])
+isermediumlaser = Weapon("ER Medium Laser", 4, 8, 12, 5, 5, "DE", 62, ids=["ISERMediumLaser","IS ER Medium Laser"])
+clanermediumlaser = Weapon("ER Medium Laser", 5, 10, 15, 7, 5, "DE", 108, ids=["CLERMediumLaser","Clan ER Medium Laser"])
+erpmediumlaser = Weapon("ER Medium Pulse Laser", 5, 9, 14, 7, 6, "P", 117, 2, (-1), ids=["CLERMediumPulseLaser","Clan ER Pulse Med Laser","Clan ER Medium Pulse Laser"])
+smalllaser = Weapon("Small Laser", 1, 2, 3, 3, 1, "DE", 9, ids=["Small Laser","ISSmall Laser","ISSmallLaser","ClSmall Laser","CL Small Laser","CLSmallLaser"])
+ispsmalllaser = Weapon("Small Pulse Laser", 1, 2, 3, 3, 2, "P", 12, 1, (-2), ids=["ISSmallPulseLaser","IS Small Pulse Laser","ISSmall Pulse Laser"])
+clanpsmalllaser = Weapon("Small Pulse Laser", 2, 4, 6, 3, 2, "P", 24, 1, (-2), ids=["CLSmallPulseLaser","Clan Pulse Small Laser","Clan Small Pulse Laser"])
+clanersmalllaser = Weapon("ER Small Laser", 2, 4, 6, 5, 2, "DE", 31, ids=["CLERSmallLaser","Clan ER Small Laser"])
+isersmalllaser = Weapon("ER Small Laser", 2, 4, 5, 3, 2, "DE", 17, ids=["ISERSmallLaser","IS ER Small Laser"])
+erpsmalllaser = Weapon("ER Small Pulse Laser", 2, 4, 6, 5, 3, None, 36, 1, (-1), ids=["CLERSmallPulseLaser","Clan ER Pulse Small Laser","Clan ER Small Pulse Laser","ClanERSmallPulseLaser"])
+Lasers = [largelaser, iserlargelaser, clanerlargelaser, isplargelaser, clanplargelaser, erplargelaser, mediumlaser, ispmediumlaser, clanpmediumlaser, isermediumlaser, clanermediumlaser, erpmediumlaser, smalllaser, ispsmalllaser, clanpsmalllaser, clanersmalllaser, isersmalllaser, erpsmalllaser]
 
 #PPCs
-ppc = Weapon("PPC", 6, 12, 18, 10, 10, "DE", 176, 3, 0, 3)
-iserppc = Weapon("ERPPC", 7, 14, 23, 10, 15, "DE", 228, 3, 0, 0)
-clanerppc = Weapon("ERPPC", 7, 14, 23, 15, 15, "DE", 412, 2, 0, 0)
-heavyppc = Weapon("Heavy PPC", 6, 12, 18, 15, 15, "DE", 317, 4, 0, 3)
-PPCs = {"PPC":ppc, "CLERPPC (omnipod)":clanerppc, "CLERPPC":clanerppc, "ISERPPC":iserppc}
+ppc = Weapon("PPC", 6, 12, 18, 10, 10, "DE", 176, 3, 0, 3, ids=["PPC","Particle Cannon","IS PPC","ISPPC"])
+iserppc = Weapon("ERPPC", 7, 14, 23, 10, 15, "DE", 228, 3, 0, 0, ids=["ISERPPC","IS ER PPC"])
+clanerppc = Weapon("ERPPC", 7, 14, 23, 15, 15, "DE", 412, 2, 0, 0, ids=["CLERPPC","Clan ER PPC"])
+heavyppc = Weapon("Heavy PPC", 6, 12, 18, 15, 15, "DE", 317, 4, 0, 3, ids=["Heavy PPC","ISHeavyPPC","ISHPPC"])
+PPCs = [ppc, clanerppc, heavyppc, iserppc]
 
 #Ballistics
-machinegun = Autocannon("Machine Gun", 1, 2, 3, 2, 0, "AI", 20, 1, 0, 0, "MG Ammo")
-Ballistics = {"Machine Gun":machinegun}
+machinegun = Autocannon("Machine Gun", 1, 2, 3, 2, 0, "AI", 20, 1, 0, 0, "MG Ammo", ids=["Machine Gun","IS Machine Gun","ISMachine Gun","ISMG","CLMG","Clan Machine Gun"])
+ac2 = Autocannon("AC2", 8, 16, 24, 2, 1, "B", 37, 1, 0, 4, "AC2 Ammo", ids=["Autocannon/2","IS Auto Cannon/2","Auto Cannon/2","AutoCannon/2","AC/2","ISAC2","IS Autocannon/2"])
+ac5 = Autocannon("AC5", 6, 12, 18, 5, 1, "B", 70, 4, 0, 3, "AC5 Ammo", ids=["Autocannon/5","IS Auto Cannon/5","Auto Cannon/5","AC/5","AutoCannon/5","ISAC5","IS Autocannon/5"])
+ac10 = Autocannon("AC10", 5, 10, 15, 10, 3, "B", 123, 7, 0, 0, "AC10 Ammo", ids=["Autocannon/10","IS Auto Cannon/10","Auto Cannon/10","AutoCannon/10","AC/10","ISAC10","IS Autocannon/10"])
+ac20 = Autocannon("AC20", 3, 6, 9, 20, 7, "B", 178, 10, 0, 0, "AC20 Ammo", ids=["Autocannon/20","IS Auto Cannon/20","Auto Cannon/20","AutoCannon/20","ISAC20","IS Autocannon/20"])
+isgaussrifle = Autocannon("Gauss Rifle", 7, 15, 22, 15, 1, "B", 320, 7, 0, 2, "Gauss Rifle Ammo", ids=["ISGaussRifle","IS Gauss Rifle"])
+clangaussrifle = Autocannon("Gauss Rifle", 7, 15, 22, 15, 1, "B", 320, 6, 0, 2, "Gauss Rifle Ammo", ids=["CLGaussRifle","Clan Gauss Rifle"])
+Ballistics = [machinegun, ac2, ac5, ac10, ac20, isgaussrifle, clangaussrifle]
 
 #Missiles
-srm2 = Missile("SRM 2", 3, 6, 9, 2, 2, "Cluster", 21, 1, 0, 0, "SRM2 Ammo", 2, 0, 1, False, False)
-isssrm2 = Missile("Streak SRM 2", 3, 6, 9, 2, 2, "Cluster", 30, 1, 0, 0, "SRM2 Ammo", 2, 0, 1, True, False, False)
-clanssrm2 = Missile("Streak SRM 2", 4, 8, 12, 2, 2, "Cluster", 40, 1, 0, 0, "SRM2 Ammo", 2, 0, 1, True)
-srm4 = Missile("SRM 4", 3, 6, 9, 2, 3, "Cluster", 39, 1, 0, 0, "SRM4 Ammo", 4, 0, 1)
-isssrm4 = Missile("Streak SRM 4", 3, 6, 9, 2, 3, "Cluster", 59, 1, 0, 0, "SRM4 Ammo", 4, 0, 1, True)
-clanssrm4 = Missile("Streak SRM 4", 4, 8, 12, 2, 3, "Cluster", 59, 1, 0, 0, "SRM4 Ammo", 4, 0, 1, True)
-issrm6 = Missile("SRM 6", 3, 6, 9, 2, 4, "Cluster", 59, 2, 0, 0, "SRM6 Ammo", 6, 0, 1)
-MechMissiles = {"SRM 2":srm2, "SRM 4":srm4, "SRM 6":issrm6}
+srm2 = Missile("SRM 2", 3, 6, 9, 2, 2, "Cluster", 21, 1, 0, 0, "SRM2 Ammo", 2, 0, 1, False, False, ids=["SRM 2","IS SRM-2","ISSRM2","IS SRM 2", "CLSRM2","Clan SRM-2","Clan SRM 2"])
+isssrm2 = Missile("Streak SRM 2", 3, 6, 9, 2, 2, "Cluster", 30, 1, 0, 0, "Streak SRM2 Ammo", 2, 0, 1, True, False, False, ids=["ISStreakSRM2","IS Streak SRM-2","IS Streak SRM 2"])
+clanssrm2 = Missile("Streak SRM 2", 4, 8, 12, 2, 2, "Cluster", 40, 1, 0, 0, "Streak SRM2 Ammo", 2, 0, 1, True, ids=["CLStreakSRM2","Clan Streak SRM-2","Clan Streak SRM 2"])
+srm4 = Missile("SRM 4", 3, 6, 9, 2, 3, "Cluster", 39, 1, 0, 0, "SRM4 Ammo", 4, 0, 1, ids=["SRM 4","IS SRM-4","ISSRM4","IS SRM 4","CLSRM4","Clan SRM-4","Clan SRM 4"])
+isssrm4 = Missile("Streak SRM 4", 3, 6, 9, 2, 3, "Cluster", 59, 1, 0, 0, "Streak SRM4 Ammo", 4, 0, 1, True, ids=["ISStreakSRM4","IS Streak SRM-4","IS Streak SRM 4"])
+clanssrm4 = Missile("Streak SRM 4", 4, 8, 12, 2, 3, "Cluster", 59, 1, 0, 0, "Streak SRM4 Ammo", 4, 0, 1, True, ids=["CLStreakSRM4","Clan Streak SRM-4","Clan Streak SRM 4"])
+issrm6 = Missile("SRM 6", 3, 6, 9, 2, 4, "Cluster", 59, 2, 0, 0, "SRM6 Ammo", 6, 0, 1, ids=["SRM 6","IS SRM-6","ISSRM6","IS SRM 6"])
+clansrm6 = Missile("SRM 6", 3, 6, 9,2,4, "Cluster", 59, 1, 0, 0, "SRM6 Ammo", 6, 0, 1, ids=["CLSRM6","Clan SRM-6","Clan SRM 6"])
+isssrm6= Missile("Streak SRM 6", 3, 6, 9, 2, 4, "Cluster", 89, 2, 0, 0, "Streak SRM6 Ammo", 6, 0, 1, True, ids=["ISStreakSRM6","IS Streak SRM-6","IS Streak SRM 6"])
+clanssrm6 = Missile("Streak SRM 6", 4, 8, 12, 2, 4, "Cluster", 118, 2, 0, 0, "Streak SRM6 Ammo", 6, 0, 1, True, ids=["CLStreakSRM6","Clan Streak SRM-6","Clan Streak SRM 6"])
+islrm5 = Missile("LRM 5", 7, 14, 21, 1, 2, "Cluster", 45, 1, 0, 6, "LRM5 Ammo", 5, 0, 5, ids=["LRM 5","IS LRM-5","ISLRM5","IS LRM 5"])
+clanlrm5 = Missile("LRM 5", 7, 14, 21, 1, 2, "Cluster", 55, 1, 0, 0, "LRM5 Ammo", 5, 0, 5, ids=["CLLRM5","Clan LRM-5","Clan LRM 5"])
+islrm10 = Missile("LRM 10", 7, 14, 21, 1, 4, "Cluster", 90, 2, 0, 6, "LRM10 Ammo", 10, 0, 5, ids=["LRM 10","IS LRM-10","ISLRM10","IS LRM 10"])
+clanlrm10 = Missile("LRM 10", 7, 14, 21, 1, 4, "Cluster", 109, 1, 0, 0, "LRM10 Ammo", 10, 0, 5, ids=["CLLRM10","Clan LRM-10","Clan LRM 10"])
+islrm15 = Missile("LRM 15", 7, 14, 21, 1, 5, "Cluster", 136, 3, 0, 6, "LRM15 Ammo", 15, 0, 5, ids=["LRM 15","IS LRM-15","ISLRM15","IS LRM 15"])
+clanlrm15 = Missile("LRM 15", 7, 14, 21, 1, 5, "Cluster", 164, 2, 0, 0, "LRM15 Ammo", 15, 0, 5, ids=["CLLRM15","Clan LRM-15","Clan LRM 15"])
+islrm20 = Missile("LRM 20", 7, 14, 21, 1, 6, "Cluster", 181, 4, 0, 6, "LRM20 Ammo", 20, 0, 5, ids=["LRM 20","IS LRM-20","ISLRM20","IS LRM 20"])
+clanlrm20 = Missile("LRM 20", 7, 14, 21, 1, 6, "Cluster", 236, 3, 0, 0, "LRM20 Ammo", 20, 0, 5, ids=["CLLRM20","Clan LRM-20","Clan LRM 20"])
+MechMissiles = [srm2, isssrm2, clanssrm2, srm4, isssrm4, clanssrm4, issrm6, clansrm6, isssrm6, clanssrm6, islrm5,clanlrm5,islrm10,clanlrm10,islrm15,clanlrm15,islrm20,clanlrm20]
 #'Mech Bits
 awesomehead8q = MechPart("Awesome HD", 9, 3, "Life Support", "Sensors", "Cockpit", copy.deepcopy(smalllaser), "Sensors", "Life Support", False, True)
 awesomeleftleg8q = MechPart("Awesome LL", 33, 17, "Hip", "Upper Leg", "Lower Leg", "Foot", copy.deepcopy(heatsink), copy.deepcopy(heatsink))
@@ -1080,10 +1112,13 @@ def partgen(part, data):
         slnum = idx + 1
         slnum = "slot" + str(slnum)
         i=item
+        item = item.strip()
+        #print(item)
         if not slnum in partslots.keys():
-            for dicts in mechbits:
-                for key, value in dicts.items():
-                    if key.lower() == item.lower():
+            for list in mechbits:
+                for value in list:
+                    if item in value.ids:
+                        #print(value)
                         partslots.update({slnum : copy.deepcopy(value)})
                         if value.slots > 1:
                             if (int(slnum[4:])+value.slots)-len(data) > 0:
@@ -1220,7 +1255,6 @@ for i in files:
 Bingus = mechgen("Apples", attacker, False)
 print(Bingus.name)
 print(Bingus.weplist)
-
 
 '''for i in range(1):
     critsthisgame = 0
