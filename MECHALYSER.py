@@ -187,6 +187,7 @@ class MechPart:
                 self.blasters.append(attr)
                 self.hasweps = True
             if isinstance(attrvalue, AmmoBin):
+                #print(attrvalue.name)
                 self.ammoslots.append(attr)
                 self.hasammo = True
             if isinstance(attrvalue, JumpJet):
@@ -438,6 +439,7 @@ class Autocannon(Weapon):
         self.heat = heat
         self.BV = BV
         self.slots = slots
+        self.xplodmg = xplodmg
         self.targetmod = targetmod
         self.damage_type = damage_type
         self.isexplosive = isexplosive
@@ -454,7 +456,7 @@ class Autocannon(Weapon):
         return self.dmg, self.ammo, self.cluster
 
 class Battlemech:
-    def __init__(self, name, head, la, ra, ll, rl, rt, lt, ct, pilot, walkspeed, tonnage, case1=False, case2=False):
+    def __init__(self, name, head, la, ra, ll, rl, rt, lt, ct, pilot, walkspeed, tonnage, case1=False, case2=False, doublesink=False):
         self.name = name
         self.hd = head
         self.la = la
@@ -471,7 +473,6 @@ class Battlemech:
         self.weightclass = ""
         self.weightclasscalc()
         self.enginerating = tonnage*walkspeed
-        self.basesinking = int(self.enginerating/25)
         self.heat = 0
         self.heatunsinked = 0
         self.currentheatmod = 0
@@ -485,6 +486,7 @@ class Battlemech:
         self.jumpspeed = 0
         self.movementmod=0
         self.sinking=0
+        self.doublesink = doublesink
         self.psrmalusperm = 0
         self.psrmalustemp = 0
         self.walkspeed = walkspeed
@@ -502,6 +504,7 @@ class Battlemech:
         self.critsthisturn = 0
         self.qdir = list(a for a in dir(self) if not a.startswith('__'))
         self.hiphits = 0
+        self.basesinking = int(self.enginerating / 25)
         self.sinkingcalculator()
         self.parts = ["la", "ra", "ll", "rl", "rt", "lt", "ct"]
         #self.wepsandammogetter()
@@ -654,9 +657,14 @@ class Battlemech:
             if isinstance(attrval, MechPart) and getattr(attrval, 'hasammo') and not getattr(attrval, 'isdestroyed'):
                 for i in attrval.ammoslots:
                     ammo = getattr(attrval, i)
-                    if not ammo.isdamaged:
-                        #print(ammo)
-                        exec(f"self.ammolist.append('{attrval.name.lower()[-2:]} {i}')")
+                    if not ammo is None:
+                        if not ammo.isdamaged:
+                            #print(ammo)
+                            #print(attrval.name, i)
+                            exec(f"self.ammolist.append('{attrval.name.lower()[-2:]} {i}')")
+                    if ammo is None:
+                        #print(attrval.name, i, "None")
+                        None
             if isinstance(attrval, MechPart) and getattr(attrval, "hasjets") and not getattr(attrval, "isdestroyed"):
                 for i in attrval.jetslots:
                     jet = getattr(attrval, i)
@@ -794,6 +802,8 @@ class Battlemech:
 
     def sinkingcalculator(self):
         sinkslist = []
+        if self.doublesink:
+            self.basesinking = self.basesinking * 2
         heatsinkssinking = 0
         for attr in self.qdir:
             attrval = getattr(self, attr)
@@ -824,118 +834,120 @@ class Battlemech:
         else:
             return
     def useammo(self, wep):
-        #print("Using Ammo")
+        # print("Using Ammo")
         firedgood = False
-        #print(wep.name)
+        # print(wep.name)
         for i in self.ammolist:
             loc =i[0:2].lower()
             slot = i[-6:].strip()
             loc = getattr(self ,loc)
             ammo = getattr(loc, slot)
-            if ammo.name == wep.ammo and not getattr(loc, 'isdestroyed'):
+            # print(ammo.name, wep.ammo)
+            if ammo.name.strip() == wep.ammo.strip():
                 if ammo.ammonum > 0:
-                    #print(ammo.ammonum)
-                    #print(f"{wep.name} fired!")
-                    ammo.ammonum-=1
+                    # print(ammo.ammonum)
+                    # print(f"{wep.name} fired!")
+                    ammo.ammonum -= 1
                     #print(ammo.ammonum)
                     firedgood = True
                     return firedgood
-                else:
-                    continue
+            else:
+                # print(ammo.name, "is not", wep.ammo)
+                continue
         return firedgood
 
 
 
 
 
-#Mech Utility
+# Mech Utility
 heatsink = HeatSink("Single Heatsink", ids=["Heat Sink"])
-isdoubleheatsink = HeatSink("Double Heatsink", 2, 3, ids=["ISDoubleHeatSink","IS Double Heat Sink","ISDouble Heat Sink"])
-clandoubleheatsink = HeatSink("Double Heatsink", 2, 2, ids=["CLDoubleHeatSink","Clan Double Heat Sink","CLDouble Heat Sink"])
+isdoubleheatsink = HeatSink("Double Heatsink", 2, 3, ids=["ISDoubleHeatSink", "IS Double Heat Sink", "ISDouble Heat Sink"])
+clandoubleheatsink = HeatSink("Double Heatsink", 2, 2, ids=["CLDoubleHeatSink", "Clan Double Heat Sink", "CLDouble Heat Sink"])
 fusengine = MechUtility("Fusion Engine", 1, False, True, ids=["Fusion Engine"])
 gyro = MechUtility("Gyro", 1, False, False, True, ids=["Gyro"])
-jumpjet = JumpJet("Jump Jet", ids=["Jump Jet","JumpJet"])
+jumpjet = JumpJet("Jump Jet", ids=["Jump Jet", "JumpJet"])
 #MechUtils = {"Gyro":gyro, "Fusion Engine":fusengine, "Heat Sink":heatsink, "ISDouble Heat Sink":isdoubleheatsink, "CLDoubleHeatSink (omnipod)":clandoubleheatsink, "CLDoubleHeatSink":clandoubleheatsink}
 MechUtils=[heatsink, isdoubleheatsink, clandoubleheatsink, fusengine, gyro, jumpjet]
 
-#Ammo Bins
-mgammo = AmmoBin("MG Ammo", 200, 1, True, 2, ids=["IS Ammo MG - Full","ISMG Ammo (200)","ISMG Ammo Full","IS Machine Gun Ammo"])
-mghalfammo = AmmoBin("MG Ammo", 100, 1, True, 2, ids=["IS Machine Gun Ammo - Half","IS Ammo MG - Half","ISMG Ammo (100)","ISMG Ammo Half","IS Machine Gun Ammo (1/2 ton)","Half Machine Gun Ammo"])
-ac2ammo = AmmoBin("AC2 Ammo", 45, 1, True, 2, ids=["IS Ammo AC/2","ISAC2 Ammo","IS Autocannon/2 Ammo"])
-ac5ammo = AmmoBin("AC5 Ammo", 20, 1, True, 5, ids=["IS Ammo AC/5","ISAC5 Ammo","IS Autocannon/5 Ammo"])
-ac10ammo = AmmoBin("AC10 Ammo", 10, 1, True, 10, ids=["IS Ammo AC/10","ISAC10 Ammo","IS Autocannon/10 Ammo"])
-ac20ammo = AmmoBin("AC20 Ammo", 5, 1, True, 20, ids=["IS Ammo AC/20","ISAC20 Ammo","IS Autocannon/20 Ammo"])
-gaussammo = AmmoBin("Gauss Rifle Ammo", 8, 1, False, 0, ids=["IS Gauss Ammo","IS Ammo Gauss","ISGauss Ammo","IS Gauss Rifle Ammo","ISGaussRifle Ammo","Clan Gauss Ammo","Clan Ammo Gauss","CLGauss Ammo","Clan Gauss Rifle Ammo"])
-srm2ammo = AmmoBin("SRM2 Ammo", 50, 1, True, 4, ids=["IS Ammo SRM-2","ISSRM2 Ammo","IS SRM 2 Ammo","Clan Ammo SRM-2","CLSRM2 Ammo","Clan SRM 2 Ammo"])
-srm4ammo = AmmoBin("SRM4 Ammo", 25, 1, True, 8, ids=["IS Ammo SRM-4","ISSRM4 Ammo","IS SRM 4 Ammo","Clan Ammo SRM-4","CLSRM4 Ammo","Clan SRM 4 Ammo"])
-srm6ammo = AmmoBin("SRM6 Ammo", 15, 1, True, 12, ids=["IS Ammo SRM-6","ISSRM6 Ammo","IS SRM 6 Ammo","Clan Ammo SRM-6","CLSRM6 Ammo","Clan SRM 6 Ammo"])
-ssrm2ammo = AmmoBin("Streak SRM2 Ammo", 50, 1, True, 4, ids=["IS Streak SRM 2 Ammo","IS Ammo Streak-2","ISStreakSRM2 Ammo","Clan Streak SRM 2 Ammo","Clan Ammo Streak-2","CLStreakSRM2 Ammo"])
-ssrm4ammo = AmmoBin("Streak SRM4 Ammo", 25, 1, True, 8, ids=["IS Streak SRM 4 Ammo","IS Ammo Streak-4","ISStreakSRM4 Ammo","Clan Streak SRM 4 Ammo","Clan Ammo Streak-4","CLStreakSRM4 Ammo"])
-ssrm6ammo = AmmoBin("Streak SRM6 Ammo", 15, 1, True, 12, ids=["IS Streak SRM 6 Ammo","IS Ammo Streak-6","ISStreakSRM6 Ammo","Clan Streak SRM 6 Ammo","Clan Ammo Streak-6","CLStreakSRM6 Ammo"])
-lrm5ammo = AmmoBin("LRM5 Ammo", 24, 1, True, 5, ids=["IS Ammo LRM-5","ISLRM5 Ammo","IS LRM 5 Ammo","Clan Ammo LRM-5","CLLRM5 Ammo","Clan LRM 5 Ammo"])
-lrm10ammo = AmmoBin("LRM10 Ammo", 12, 1, True, 10, ids=["IS Ammo LRM-10","ISLRM10 Ammo","IS LRM 10 Ammo","Clan Ammo LRM-10","CLLRM10 Ammo","Clan LRM 10 Ammo"])
-lrm15ammo = AmmoBin("LRM15 Ammo", 8, 1, True, 15, ids=["IS Ammo LRM-15","ISLRM15 Ammo","IS LRM 15 Ammo","Clan Ammo LRM-15","CLLRM15 Ammo","Clan LRM 15 Ammo"])
-lrm20ammo = AmmoBin("LRM20 Ammo", 6, 1, True, 20, ids=["IS Ammo LRM-20","ISLRM20 Ammo","IS LRM 20 Ammo","Clan Ammo LRM-20","CLLRM20 Ammo","Clan LRM 20 Ammo"])
+# Ammo Bins
+mgammo = AmmoBin("MG Ammo", 200, 1, True, 2, ids=["IS Ammo MG - Full", "ISMG Ammo (200)", "ISMG Ammo Full", "IS Machine Gun Ammo"])
+mghalfammo = AmmoBin("MG Ammo", 100, 1, True, 2, ids=["IS Machine Gun Ammo - Half", "IS Ammo MG - Half", "ISMG Ammo (100)", "ISMG Ammo Half", "IS Machine Gun Ammo (1/2 ton)", "Half Machine Gun Ammo"])
+ac2ammo = AmmoBin("AC2 Ammo", 45, 1, True, 2, ids=["IS Ammo AC/2", "ISAC2 Ammo", "IS Autocannon/2 Ammo"])
+ac5ammo = AmmoBin("AC5 Ammo", 20, 1, True, 5, ids=["IS Ammo AC/5", "ISAC5 Ammo", "IS Autocannon/5 Ammo"])
+ac10ammo = AmmoBin("AC10 Ammo", 10, 1, True, 10, ids=["IS Ammo AC/10", "ISAC10 Ammo", "IS Autocannon/10 Ammo"])
+ac20ammo = AmmoBin("AC20 Ammo", 5, 1, True, 20, ids=["IS Ammo AC/20", "ISAC20 Ammo", "IS Autocannon/20 Ammo"])
+gaussammo = AmmoBin("Gauss Rifle Ammo", 8, 1, False, 0, ids=["IS Gauss Ammo", "IS Ammo Gauss", "ISGauss Ammo", "IS Gauss Rifle Ammo", "ISGaussRifle Ammo", "Clan Gauss Ammo", "Clan Ammo Gauss", "CLGauss Ammo", "Clan Gauss Rifle Ammo"])
+srm2ammo = AmmoBin("SRM2 Ammo", 50, 1, True, 4, ids=["IS Ammo SRM-2", "ISSRM2 Ammo", "IS SRM 2 Ammo", "Clan Ammo SRM-2", "CLSRM2 Ammo", "Clan SRM 2 Ammo"])
+srm4ammo = AmmoBin("SRM4 Ammo", 25, 1, True, 8, ids=["IS Ammo SRM-4","ISSRM4 Ammo", "IS SRM 4 Ammo", "Clan Ammo SRM-4", "CLSRM4 Ammo", "Clan SRM 4 Ammo"])
+srm6ammo = AmmoBin("SRM6 Ammo", 15, 1, True, 12, ids=["IS Ammo SRM-6","ISSRM6 Ammo", "IS SRM 6 Ammo", "Clan Ammo SRM-6", "CLSRM6 Ammo", "Clan SRM 6 Ammo"])
+ssrm2ammo = AmmoBin("Streak SRM2 Ammo", 50, 1, True, 4, ids=["IS Streak SRM 2 Ammo", "IS Ammo Streak-2", "ISStreakSRM2 Ammo", "Clan Streak SRM 2 Ammo", "Clan Ammo Streak-2", "CLStreakSRM2 Ammo"])
+ssrm4ammo = AmmoBin("Streak SRM4 Ammo", 25, 1, True, 8, ids=["IS Streak SRM 4 Ammo", "IS Ammo Streak-4", "ISStreakSRM4 Ammo", "Clan Streak SRM 4 Ammo", "Clan Ammo Streak-4", "CLStreakSRM4 Ammo"])
+ssrm6ammo = AmmoBin("Streak SRM6 Ammo", 15, 1, True, 12, ids=["IS Streak SRM 6 Ammo", "IS Ammo Streak-6", "ISStreakSRM6 Ammo", "Clan Streak SRM 6 Ammo", "Clan Ammo Streak-6","CLStreakSRM6 Ammo"])
+lrm5ammo = AmmoBin("LRM5 Ammo", 24, 1, True, 5, ids=["IS Ammo LRM-5", "ISLRM5 Ammo", "IS LRM 5 Ammo", "Clan Ammo LRM-5", "CLLRM5 Ammo", "Clan LRM 5 Ammo"])
+lrm10ammo = AmmoBin("LRM10 Ammo", 12, 1, True, 10, ids=["IS Ammo LRM-10", "ISLRM10 Ammo", "IS LRM 10 Ammo", "Clan Ammo LRM-10","CLLRM10 Ammo", "Clan LRM 10 Ammo"])
+lrm15ammo = AmmoBin("LRM15 Ammo", 8, 1, True, 15, ids=["IS Ammo LRM-15", "ISLRM15 Ammo", "IS LRM 15 Ammo", "Clan Ammo LRM-15","CLLRM15 Ammo", "Clan LRM 15 Ammo"])
+lrm20ammo = AmmoBin("LRM20 Ammo", 6, 1, True, 20, ids=["IS Ammo LRM-20", "ISLRM20 Ammo", "IS LRM 20 Ammo", "Clan Ammo LRM-20","CLLRM20 Ammo", "Clan LRM 20 Ammo"])
 MechAmmo = [mgammo, mghalfammo, ac2ammo, ac5ammo, ac10ammo, ac20ammo, gaussammo, srm2ammo, srm4ammo, srm6ammo, ssrm2ammo, ssrm4ammo, ssrm6ammo, lrm5ammo, lrm10ammo, lrm15ammo, lrm20ammo]
-#Lasers
-largelaser = Weapon("Large Laser", 5, 10, 15, 8, 8, "DE", 123, 2, ids=["Large Laser","IS Large Laser","ISLargeLaser"])
-iserlargelaser = Weapon("ER Large Laser", 7, 14, 19, 8, 12, "DE", 163, 2 ,ids=["ISERLargeLaser","IS ER Large Laser"])
-clanerlargelaser = Weapon("ER Large Laser", 8, 15, 25, 10, 12, "DE", 248, ids=["CLERLargeLaser","Clan ER Large Laser"])
-isplargelaser = Weapon("Large Pulse Laser", 3, 7, 10, 9, 10, "P", 119, 2, -2, ids=["ISLargePulseLaser","IS Pulse Large Laser","IS Large Pulse Laser"])
-clanplargelaser = Weapon("Large Pulse Laser", 6, 14, 20, 10, 10, "P", 265, 2, (-2), ids=["CLLargePulseLaser","Clan Pulse Large Laser","Clan Large Pulse Laser"])
-erplargelaser = Weapon("ER Large Pulse Laser", 7, 15, 23, 10, 13, "P", 272, 3, (-1), ids=["CLERLargePulseLaser","Clan ER Pulse Large Laser","Clan ER Large Pulse Laser"])
-mediumlaser = Weapon("Medium Laser", 3, 6, 9, 5, 3, "DE", 46, ids=["Medium Laser","IS Medium Laser","ISMediumLaser"])
-ispmediumlaser = Weapon("Medium Pulse Laser", 2, 4, 6, 6, 4, "P", 48, 1, (-2), ids=["ISMediumPulseLaser","IS Pulse Med Laser","IS Medium Pulse Laser"])
-clanpmediumlaser = Weapon("Medium Pulse Laser", 4, 8, 12, 7, 4, "P", 111, 1, (-2), ids=["CLMediumPulseLaser","Clan Pulse Med Laser","Clan Medium Pulse Laser"])
-isermediumlaser = Weapon("ER Medium Laser", 4, 8, 12, 5, 5, "DE", 62, ids=["ISERMediumLaser","IS ER Medium Laser"])
-clanermediumlaser = Weapon("ER Medium Laser", 5, 10, 15, 7, 5, "DE", 108, ids=["CLERMediumLaser","Clan ER Medium Laser"])
-erpmediumlaser = Weapon("ER Medium Pulse Laser", 5, 9, 14, 7, 6, "P", 117, 2, (-1), ids=["CLERMediumPulseLaser","Clan ER Pulse Med Laser","Clan ER Medium Pulse Laser"])
-smalllaser = Weapon("Small Laser", 1, 2, 3, 3, 1, "DE", 9, ids=["Small Laser","ISSmall Laser","ISSmallLaser","ClSmall Laser","CL Small Laser","CLSmallLaser"])
-ispsmalllaser = Weapon("Small Pulse Laser", 1, 2, 3, 3, 2, "P", 12, 1, (-2), ids=["ISSmallPulseLaser","IS Small Pulse Laser","ISSmall Pulse Laser"])
-clanpsmalllaser = Weapon("Small Pulse Laser", 2, 4, 6, 3, 2, "P", 24, 1, (-2), ids=["CLSmallPulseLaser","Clan Pulse Small Laser","Clan Small Pulse Laser"])
-clanersmalllaser = Weapon("ER Small Laser", 2, 4, 6, 5, 2, "DE", 31, ids=["CLERSmallLaser","Clan ER Small Laser"])
-isersmalllaser = Weapon("ER Small Laser", 2, 4, 5, 3, 2, "DE", 17, ids=["ISERSmallLaser","IS ER Small Laser"])
-erpsmalllaser = Weapon("ER Small Pulse Laser", 2, 4, 6, 5, 3, None, 36, 1, (-1), ids=["CLERSmallPulseLaser","Clan ER Pulse Small Laser","Clan ER Small Pulse Laser","ClanERSmallPulseLaser"])
+# Lasers
+largelaser = Weapon("Large Laser", 5, 10, 15, 8, 8, "DE", 123, 2, ids=["Large Laser", "IS Large Laser", "ISLargeLaser"])
+iserlargelaser = Weapon("ER Large Laser", 7, 14, 19, 8, 12, "DE", 163, 2 ,ids=["ISERLargeLaser", "IS ER Large Laser"])
+clanerlargelaser = Weapon("ER Large Laser", 8, 15, 25, 10, 12, "DE", 248, ids=["CLERLargeLaser", "Clan ER Large Laser"])
+isplargelaser = Weapon("Large Pulse Laser", 3, 7, 10, 9, 10, "P", 119, 2, -2, ids=["ISLargePulseLaser", "IS Pulse Large Laser", "IS Large Pulse Laser"])
+clanplargelaser = Weapon("Large Pulse Laser", 6, 14, 20, 10, 10, "P", 265, 2, (-2), ids=["CLLargePulseLaser", "Clan Pulse Large Laser","Clan Large Pulse Laser"])
+erplargelaser = Weapon("ER Large Pulse Laser", 7, 15, 23, 10, 13, "P", 272, 3, (-1), ids=["CLERLargePulseLaser", "Clan ER Pulse Large Laser","Clan ER Large Pulse Laser"])
+mediumlaser = Weapon("Medium Laser", 3, 6, 9, 5, 3, "DE", 46, ids=["Medium Laser", "IS Medium Laser", "ISMediumLaser"])
+ispmediumlaser = Weapon("Medium Pulse Laser", 2, 4, 6, 6, 4, "P", 48, 1, (-2), ids=["ISMediumPulseLaser", "IS Pulse Med Laser", "IS Medium Pulse Laser"])
+clanpmediumlaser = Weapon("Medium Pulse Laser", 4, 8, 12, 7, 4, "P", 111, 1, (-2), ids=["CLMediumPulseLaser", "Clan Pulse Med Laser", "Clan Medium Pulse Laser"])
+isermediumlaser = Weapon("ER Medium Laser", 4, 8, 12, 5, 5, "DE", 62, ids=["ISERMediumLaser", "IS ER Medium Laser"])
+clanermediumlaser = Weapon("ER Medium Laser", 5, 10, 15, 7, 5, "DE", 108, ids=["CLERMediumLaser", "Clan ER Medium Laser"])
+erpmediumlaser = Weapon("ER Medium Pulse Laser", 5, 9, 14, 7, 6, "P", 117, 2, (-1), ids=["CLERMediumPulseLaser", "Clan ER Pulse Med Laser", "Clan ER Medium Pulse Laser"])
+smalllaser = Weapon("Small Laser", 1, 2, 3, 3, 1, "DE", 9, ids=["Small Laser", "ISSmall Laser", "ISSmallLaser", "ClSmall Laser", "CL Small Laser", "CLSmallLaser"])
+ispsmalllaser = Weapon("Small Pulse Laser", 1, 2, 3, 3, 2, "P", 12, 1, (-2), ids=["ISSmallPulseLaser", "IS Small Pulse Laser", "ISSmall Pulse Laser"])
+clanpsmalllaser = Weapon("Small Pulse Laser", 2, 4, 6, 3, 2, "P", 24, 1, (-2), ids=["CLSmallPulseLaser", "Clan Pulse Small Laser", "Clan Small Pulse Laser"])
+clanersmalllaser = Weapon("ER Small Laser", 2, 4, 6, 5, 2, "DE", 31, ids=["CLERSmallLaser", "Clan ER Small Laser"])
+isersmalllaser = Weapon("ER Small Laser", 2, 4, 5, 3, 2, "DE", 17, ids=["ISERSmallLaser", "IS ER Small Laser"])
+erpsmalllaser = Weapon("ER Small Pulse Laser", 2, 4, 6, 5, 3, None, 36, 1, (-1), ids=["CLERSmallPulseLaser", "Clan ER Pulse Small Laser", "Clan ER Small Pulse Laser", "ClanERSmallPulseLaser"])
 Lasers = [largelaser, iserlargelaser, clanerlargelaser, isplargelaser, clanplargelaser, erplargelaser, mediumlaser, ispmediumlaser, clanpmediumlaser, isermediumlaser, clanermediumlaser, erpmediumlaser, smalllaser, ispsmalllaser, clanpsmalllaser, clanersmalllaser, isersmalllaser, erpsmalllaser]
 
-#PPCs
-ppc = Weapon("PPC", 6, 12, 18, 10, 10, "DE", 176, 3, 0, 3, ids=["PPC","Particle Cannon","IS PPC","ISPPC"])
-iserppc = Weapon("ERPPC", 7, 14, 23, 10, 15, "DE", 228, 3, 0, 0, ids=["ISERPPC","IS ER PPC"])
-clanerppc = Weapon("ERPPC", 7, 14, 23, 15, 15, "DE", 412, 2, 0, 0, ids=["CLERPPC","Clan ER PPC"])
-heavyppc = Weapon("Heavy PPC", 6, 12, 18, 15, 15, "DE", 317, 4, 0, 3, ids=["Heavy PPC","ISHeavyPPC","ISHPPC"])
+# PPCs
+ppc = Weapon("PPC", 6, 12, 18, 10, 10, "DE", 176, 3, 0, 3, ids=["PPC", "Particle Cannon", "IS PPC", "ISPPC"])
+iserppc = Weapon("ERPPC", 7, 14, 23, 10, 15, "DE", 228, 3, 0, 0, ids=["ISERPPC", "IS ER PPC"])
+clanerppc = Weapon("ERPPC", 7, 14, 23, 15, 15, "DE", 412, 2, 0, 0, ids=["CLERPPC", "Clan ER PPC"])
+heavyppc = Weapon("Heavy PPC", 6, 12, 18, 15, 15, "DE", 317, 4, 0, 3, ids=["Heavy PPC", "ISHeavyPPC", "ISHPPC"])
 PPCs = [ppc, clanerppc, heavyppc, iserppc]
 
-#Ballistics
-machinegun = Autocannon("Machine Gun", 1, 2, 3, 2, 0, "AI", 20, 1, 0, 0, "MG Ammo", ids=["Machine Gun","IS Machine Gun","ISMachine Gun","ISMG","CLMG","Clan Machine Gun"])
-ac2 = Autocannon("AC2", 8, 16, 24, 2, 1, "B", 37, 1, 0, 4, "AC2 Ammo", ids=["Autocannon/2","IS Auto Cannon/2","Auto Cannon/2","AutoCannon/2","AC/2","ISAC2","IS Autocannon/2"])
-ac5 = Autocannon("AC5", 6, 12, 18, 5, 1, "B", 70, 4, 0, 3, "AC5 Ammo", ids=["Autocannon/5","IS Auto Cannon/5","Auto Cannon/5","AC/5","AutoCannon/5","ISAC5","IS Autocannon/5"])
-ac10 = Autocannon("AC10", 5, 10, 15, 10, 3, "B", 123, 7, 0, 0, "AC10 Ammo", ids=["Autocannon/10","IS Auto Cannon/10","Auto Cannon/10","AutoCannon/10","AC/10","ISAC10","IS Autocannon/10"])
-ac20 = Autocannon("AC20", 3, 6, 9, 20, 7, "B", 178, 10, 0, 0, "AC20 Ammo", ids=["Autocannon/20","IS Auto Cannon/20","Auto Cannon/20","AutoCannon/20","ISAC20","IS Autocannon/20"])
-isgaussrifle = Autocannon("Gauss Rifle", 7, 15, 22, 15, 1, "B", 320, 7, 0, 2, "Gauss Rifle Ammo", ids=["ISGaussRifle","IS Gauss Rifle"])
-clangaussrifle = Autocannon("Gauss Rifle", 7, 15, 22, 15, 1, "B", 320, 6, 0, 2, "Gauss Rifle Ammo", ids=["CLGaussRifle","Clan Gauss Rifle"])
+# Ballistics
+machinegun = Autocannon("Machine Gun", 1, 2, 3, 2, 0, "AI", 20, 1, 0, 0, "MG Ammo", ids=["Machine Gun", "IS Machine Gun", "ISMachine Gun", "ISMG", "CLMG", "Clan Machine Gun"])
+ac2 = Autocannon("AC2", 8, 16, 24, 2, 1, "B", 37, 1, 0, 4, "AC2 Ammo", ids=["Autocannon/2", "IS Auto Cannon/2", "Auto Cannon/2", "AutoCannon/2", "AC/2", "ISAC2", "IS Autocannon/2"])
+ac5 = Autocannon("AC5", 6, 12, 18, 5, 1, "B", 70, 4, 0, 3, "AC5 Ammo", ids=["Autocannon/5", "IS Auto Cannon/5", "Auto Cannon/5", "AC/5", "AutoCannon/5", "ISAC5", "IS Autocannon/5"])
+ac10 = Autocannon("AC10", 5, 10, 15, 10, 3, "B", 123, 7, 0, 0, "AC10 Ammo", ids=["Autocannon/10", "IS Auto Cannon/10", "Auto Cannon/10", "AutoCannon/10", "AC/10", "ISAC10", "IS Autocannon/10"])
+ac20 = Autocannon("AC20", 3, 6, 9, 20, 7, "B", 178, 10, 0, 0, "AC20 Ammo", ids=["Autocannon/20", "IS Auto Cannon/20", "Auto Cannon/20", "AutoCannon/20", "ISAC20", "IS Autocannon/20"])
+isgaussrifle = Autocannon("Gauss Rifle", 7, 15, 22, 15, 1, "B", 320, 7, 0, 2, "Gauss Rifle Ammo", ids=["ISGaussRifle", "IS Gauss Rifle"], isexplosive=True)
+clangaussrifle = Autocannon("Gauss Rifle", 7, 15, 22, 15, 1, "B", 320, 6, 0, 2, "Gauss Rifle Ammo", ids=["CLGaussRifle", "Clan Gauss Rifle"], isexplosive=True)
 Ballistics = [machinegun, ac2, ac5, ac10, ac20, isgaussrifle, clangaussrifle]
 
-#Missiles
-srm2 = Missile("SRM 2", 3, 6, 9, 2, 2, "Cluster", 21, 1, 0, 0, "SRM2 Ammo", 2, 0, 1, False, False, ids=["SRM 2","IS SRM-2","ISSRM2","IS SRM 2", "CLSRM2","Clan SRM-2","Clan SRM 2"])
-isssrm2 = Missile("Streak SRM 2", 3, 6, 9, 2, 2, "Cluster", 30, 1, 0, 0, "Streak SRM2 Ammo", 2, 0, 1, True, False, False, ids=["ISStreakSRM2","IS Streak SRM-2","IS Streak SRM 2"])
-clanssrm2 = Missile("Streak SRM 2", 4, 8, 12, 2, 2, "Cluster", 40, 1, 0, 0, "Streak SRM2 Ammo", 2, 0, 1, True, ids=["CLStreakSRM2","Clan Streak SRM-2","Clan Streak SRM 2"])
-srm4 = Missile("SRM 4", 3, 6, 9, 2, 3, "Cluster", 39, 1, 0, 0, "SRM4 Ammo", 4, 0, 1, ids=["SRM 4","IS SRM-4","ISSRM4","IS SRM 4","CLSRM4","Clan SRM-4","Clan SRM 4"])
-isssrm4 = Missile("Streak SRM 4", 3, 6, 9, 2, 3, "Cluster", 59, 1, 0, 0, "Streak SRM4 Ammo", 4, 0, 1, True, ids=["ISStreakSRM4","IS Streak SRM-4","IS Streak SRM 4"])
-clanssrm4 = Missile("Streak SRM 4", 4, 8, 12, 2, 3, "Cluster", 59, 1, 0, 0, "Streak SRM4 Ammo", 4, 0, 1, True, ids=["CLStreakSRM4","Clan Streak SRM-4","Clan Streak SRM 4"])
-issrm6 = Missile("SRM 6", 3, 6, 9, 2, 4, "Cluster", 59, 2, 0, 0, "SRM6 Ammo", 6, 0, 1, ids=["SRM 6","IS SRM-6","ISSRM6","IS SRM 6"])
-clansrm6 = Missile("SRM 6", 3, 6, 9,2,4, "Cluster", 59, 1, 0, 0, "SRM6 Ammo", 6, 0, 1, ids=["CLSRM6","Clan SRM-6","Clan SRM 6"])
-isssrm6= Missile("Streak SRM 6", 3, 6, 9, 2, 4, "Cluster", 89, 2, 0, 0, "Streak SRM6 Ammo", 6, 0, 1, True, ids=["ISStreakSRM6","IS Streak SRM-6","IS Streak SRM 6"])
-clanssrm6 = Missile("Streak SRM 6", 4, 8, 12, 2, 4, "Cluster", 118, 2, 0, 0, "Streak SRM6 Ammo", 6, 0, 1, True, ids=["CLStreakSRM6","Clan Streak SRM-6","Clan Streak SRM 6"])
-islrm5 = Missile("LRM 5", 7, 14, 21, 1, 2, "Cluster", 45, 1, 0, 6, "LRM5 Ammo", 5, 0, 5, ids=["LRM 5","IS LRM-5","ISLRM5","IS LRM 5"])
-clanlrm5 = Missile("LRM 5", 7, 14, 21, 1, 2, "Cluster", 55, 1, 0, 0, "LRM5 Ammo", 5, 0, 5, ids=["CLLRM5","Clan LRM-5","Clan LRM 5"])
-islrm10 = Missile("LRM 10", 7, 14, 21, 1, 4, "Cluster", 90, 2, 0, 6, "LRM10 Ammo", 10, 0, 5, ids=["LRM 10","IS LRM-10","ISLRM10","IS LRM 10"])
-clanlrm10 = Missile("LRM 10", 7, 14, 21, 1, 4, "Cluster", 109, 1, 0, 0, "LRM10 Ammo", 10, 0, 5, ids=["CLLRM10","Clan LRM-10","Clan LRM 10"])
-islrm15 = Missile("LRM 15", 7, 14, 21, 1, 5, "Cluster", 136, 3, 0, 6, "LRM15 Ammo", 15, 0, 5, ids=["LRM 15","IS LRM-15","ISLRM15","IS LRM 15"])
-clanlrm15 = Missile("LRM 15", 7, 14, 21, 1, 5, "Cluster", 164, 2, 0, 0, "LRM15 Ammo", 15, 0, 5, ids=["CLLRM15","Clan LRM-15","Clan LRM 15"])
-islrm20 = Missile("LRM 20", 7, 14, 21, 1, 6, "Cluster", 181, 4, 0, 6, "LRM20 Ammo", 20, 0, 5, ids=["LRM 20","IS LRM-20","ISLRM20","IS LRM 20"])
-clanlrm20 = Missile("LRM 20", 7, 14, 21, 1, 6, "Cluster", 236, 3, 0, 0, "LRM20 Ammo", 20, 0, 5, ids=["CLLRM20","Clan LRM-20","Clan LRM 20"])
-MechMissiles = [srm2, isssrm2, clanssrm2, srm4, isssrm4, clanssrm4, issrm6, clansrm6, isssrm6, clanssrm6, islrm5,clanlrm5,islrm10,clanlrm10,islrm15,clanlrm15,islrm20,clanlrm20]
-#'Mech Bits
+# Missiles
+srm2 = Missile("SRM 2", 3, 6, 9, 2, 2, "Cluster", 21, 1, 0, 0, "SRM2 Ammo", 2, 0, 1, False, False, ids=["SRM 2", "IS SRM-2", "ISSRM2", "IS SRM 2", "CLSRM2", "Clan SRM-2", "Clan SRM 2"])
+isssrm2 = Missile("Streak SRM 2", 3, 6, 9, 2, 2, "Cluster", 30, 1, 0, 0, "Streak SRM2 Ammo", 2, 0, 1, True, False, False, ids=["ISStreakSRM2", "IS Streak SRM-2", "IS Streak SRM 2"])
+clanssrm2 = Missile("Streak SRM 2", 4, 8, 12, 2, 2, "Cluster", 40, 1, 0, 0, "Streak SRM2 Ammo", 2, 0, 1, True, ids=["CLStreakSRM2", "Clan Streak SRM-2", "Clan Streak SRM 2"])
+srm4 = Missile("SRM 4", 3, 6, 9, 2, 3, "Cluster", 39, 1, 0, 0, "SRM4 Ammo", 4, 0, 1, ids=["SRM 4", "IS SRM-4", "ISSRM4", "IS SRM 4", "CLSRM4", "Clan SRM-4", "Clan SRM 4"])
+isssrm4 = Missile("Streak SRM 4", 3, 6, 9, 2, 3, "Cluster", 59, 1, 0, 0, "Streak SRM4 Ammo", 4, 0, 1, True, ids=["ISStreakSRM4", "IS Streak SRM-4", "IS Streak SRM 4"])
+clanssrm4 = Missile("Streak SRM 4", 4, 8, 12, 2, 3, "Cluster", 59, 1, 0, 0, "Streak SRM4 Ammo", 4, 0, 1, True, ids=["CLStreakSRM4", "Clan Streak SRM-4", "Clan Streak SRM 4"])
+issrm6 = Missile("SRM 6", 3, 6, 9, 2, 4, "Cluster", 59, 2, 0, 0, "SRM6 Ammo", 6, 0, 1, ids=["SRM 6", "IS SRM-6", "ISSRM6", "IS SRM 6"])
+clansrm6 = Missile("SRM 6", 3, 6, 9,2,4, "Cluster", 59, 1, 0, 0, "SRM6 Ammo", 6, 0, 1, ids=["CLSRM6", "Clan SRM-6", "Clan SRM 6"])
+isssrm6= Missile("Streak SRM 6", 3, 6, 9, 2, 4, "Cluster", 89, 2, 0, 0, "Streak SRM6 Ammo", 6, 0, 1, True, ids=["ISStreakSRM6", "IS Streak SRM-6", "IS Streak SRM 6"])
+clanssrm6 = Missile("Streak SRM 6", 4, 8, 12, 2, 4, "Cluster", 118, 2, 0, 0, "Streak SRM6 Ammo", 6, 0, 1, True, ids=["CLStreakSRM6", "Clan Streak SRM-6", "Clan Streak SRM 6"])
+islrm5 = Missile("LRM 5", 7, 14, 21, 1, 2, "Cluster", 45, 1, 0, 6, "LRM5 Ammo", 5, 0, 5, ids=["LRM 5", "IS LRM-5", "ISLRM5", "IS LRM 5"])
+clanlrm5 = Missile("LRM 5", 7, 14, 21, 1, 2, "Cluster", 55, 1, 0, 0, "LRM5 Ammo", 5, 0, 5, ids=["CLLRM5", "Clan LRM-5", "Clan LRM 5"])
+islrm10 = Missile("LRM 10", 7, 14, 21, 1, 4, "Cluster", 90, 2, 0, 6, "LRM10 Ammo", 10, 0, 5, ids=["LRM 10", "IS LRM-10", "ISLRM10", "IS LRM 10"])
+clanlrm10 = Missile("LRM 10", 7, 14, 21, 1, 4, "Cluster", 109, 1, 0, 0, "LRM10 Ammo", 10, 0, 5, ids=["CLLRM10", "Clan LRM-10", "Clan LRM 10"])
+islrm15 = Missile("LRM 15", 7, 14, 21, 1, 5, "Cluster", 136, 3, 0, 6, "LRM15 Ammo", 15, 0, 5, ids=["LRM 15", "IS LRM-15", "ISLRM15", "IS LRM 15"])
+clanlrm15 = Missile("LRM 15", 7, 14, 21, 1, 5, "Cluster", 164, 2, 0, 0, "LRM15 Ammo", 15, 0, 5, ids=["CLLRM15", "Clan LRM-15", "Clan LRM 15"])
+islrm20 = Missile("LRM 20", 7, 14, 21, 1, 6, "Cluster", 181, 4, 0, 6, "LRM20 Ammo", 20, 0, 5, ids=["LRM 20", "IS LRM-20", "ISLRM20", "IS LRM 20"])
+clanlrm20 = Missile("LRM 20", 7, 14, 21, 1, 6, "Cluster", 236, 3, 0, 0, "LRM20 Ammo", 20, 0, 5, ids=["CLLRM20", "Clan LRM-20", "Clan LRM 20"])
+MechMissiles = [srm2, isssrm2, clanssrm2, srm4, isssrm4, clanssrm4, issrm6, clansrm6, isssrm6, clanssrm6, islrm5, clanlrm5, islrm10, clanlrm10, islrm15, clanlrm15, islrm20, clanlrm20]
+# 'Mech Bits
 awesomehead8q = MechPart("Awesome HD", 9, 3, "Life Support", "Sensors", "Cockpit", copy.deepcopy(smalllaser), "Sensors", "Life Support", False, True)
 awesomeleftleg8q = MechPart("Awesome LL", 33, 17, "Hip", "Upper Leg", "Lower Leg", "Foot", copy.deepcopy(heatsink), copy.deepcopy(heatsink))
 awesomerightleg8q = MechPart("Awesome RL", 33, 17, "Hip", "Upper Leg", "Lower Leg", "Foot", copy.deepcopy(heatsink), copy.deepcopy(heatsink))
@@ -946,11 +958,11 @@ awesomelefttorso8q = MechPartBig("Awesome LT", 24, 10, 17, copy.deepcopy(heatsin
 awesomecentretorso8q = MechPartBig("Awesome CT", 30, 19, 25, copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(gyro), copy.deepcopy(gyro), copy.deepcopy(gyro), copy.deepcopy(gyro), copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(heatsink), copy.deepcopy(heatsink))
 thunderbolt5srightarm = MechPartBig("Thunderbolt RA", 20, 0, 10, "Shoulder", "Upper Arm", "Lower Arm", "Hand", copy.deepcopy(largelaser))
 
-#Mechwarriors
+# Mechwarriors
 genericmechwarrior = Pilot("David B.", 5, 2)
 
-#Battlemechs
-#awesome8q = Battlemech("Awesome 8Q", awesomehead8q, awesomeleftarm8q, awesomerightarm8q, awesomeleftleg8q, awesomerightleg8q, awesomerighttorso8q, awesomelefttorso8q, awesomecentretorso8q, genericmechwarrior, 3, 80)
+# Battlemechs
+# awesome8q = Battlemech("Awesome 8Q", awesomehead8q, awesomeleftarm8q, awesomerightarm8q, awesomeleftleg8q, awesomerightleg8q, awesomerighttorso8q, awesomelefttorso8q, awesomecentretorso8q, genericmechwarrior, 3, 80)
 
 mechbits = [MechUtils, PPCs, Lasers, MechMissiles, MechAmmo, Ballistics]
 
@@ -958,7 +970,7 @@ def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=N
     target.turn+=0.00000001
     range = int(range)
     skill = int(skill)
-    if shooter.hasfired == True:
+    if shooter.hasfired:
         return
     shooter.hasfired = True
     if range <= shooter.minrange:
@@ -976,22 +988,31 @@ def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=N
             #print(shooter)
             hadammo = firingmech.useammo(shooter)
             if not hadammo:
-                print("Click!")
+                # print("Click!", shooter.name)
                 return
+            else:
+                # print("Fired", shooter.name)
+                None
         else:
             raise(f"{shooter.name} has attr ammo, but Ammo is set to None!")
     hittarget = skill + rmod + shooter.targetmod + heatmod + movemod + target.tmm
     if allhit:
         hittarget = 0
     roll = random.randint(1, 6) + random.randint(1, 6)
-    #print(rmod, roll, hittarget, range, shooter.name, target.tmm, movemod, skill, firingmech.name, target.name)
-    if not hasattr(shooter, "cluster") or hasattr(shooter, "cluster") and shooter.streak == False:
+    # print(rmod, roll, hittarget, range, shooter.name, target.tmm, movemod, skill, firingmech.name, target.name)
+    if not hasattr(shooter, "streak"):
         firingmech.wepsfired.append(shooter.name)
         firingmech.heat += shooter.heat
+    if hasattr(shooter, "cluster"):
+        if hasattr(shooter, "streak"):
+            if not shooter.streak:
+                firingmech.wepsfired.append(shooter.name)
+                firingmech.heat += shooter.heat
     if roll >= hittarget:
-        if hasattr(shooter, "cluster") and shooter.streak == True:
-            firingmech.wepsfired.append(shooter.name)
-            firingmech.heat += shooter.heat
+        if hasattr(shooter, "cluster") and hasattr(shooter, "streak"):
+            if shooter.streak == True:
+                firingmech.wepsfired.append(shooter.name)
+                firingmech.heat += shooter.heat
         #print("Hit!")
         #print("Hit with " + shooter.name + "!")
         if hasattr(shooter, 'cluster') and shooter.cluster != None:
@@ -1024,8 +1045,8 @@ def crit(target, critnum, mek):
         return
     if critnum == 3:
         a = lambda l:target.name.lower()[-2:] == l
-        if a('hd') or a('ll') or a('rl') or a('la') or a(r'a'):
-            #print("Wow")
+        if a('hd') or a('ll') or a('rl') or a('la') or a('ra'):
+            # print("Wow")
             limbdeath = True
             target.isdestroyed = True
             if a('hd'):
@@ -1054,7 +1075,7 @@ def crit(target, critnum, mek):
             roll = random.randint(1, 6)
         location = f"slot{roll}"
         a=getattr(target, location)
-        if getattr(target, location) == None:
+        if getattr(target, location) is None:
             if z > 50:
                 if target.name.lower()[-2:] =="ct":
                     mek.isdead = True
@@ -1077,7 +1098,7 @@ def crit(target, critnum, mek):
         else:
             a = (getattr(target, location))
             #print(a.name)
-            times=times+1
+            times = times+1
             #print(times)
             #print(z)
             z += 1
@@ -1085,7 +1106,7 @@ def crit(target, critnum, mek):
             if hasattr(a, 'isengine'):
                 if getattr(a, 'isengine'):
                     mek.enginehits += 1
-                    if mek.enginehits >=3:
+                    if mek.enginehits >= 3:
                         mek.isdead = True
                         mek.causeofdeath = "EKill"
                         return
@@ -1096,8 +1117,10 @@ def crit(target, critnum, mek):
             #print(getattr(a, 'isdamaged'))
             setattr(target, location, None)
             continue
-    if limbdeath: print("Jimmy")
+    if limbdeath:
+        print("Jimmy")
     if critoverflow > 0: crit(dooverflow(target, mek), (critoverflow), mek)
+
 
 def docluster(dmg=0, weapon=None, firingmech=None, target=None):
     clust2 = [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
@@ -1233,8 +1256,12 @@ def partgen(part, data):
         slnum = idx + 1
         slnum = "slot" + str(slnum)
         i=item
+        if "(omnipod)" in item:
+            # print(item)
+            item = item[:-10]
+            # print(item)
         item = item.strip()
-        #print(item)
+        # print(item)
         if not slnum in partslots.keys():
             for list in mechbits:
                 for value in list:
@@ -1261,6 +1288,8 @@ def partgen(part, data):
 def mechgen(name, file, isprotag=False):
     strt = time.time()
     global mechbits
+    case1=False
+    case2=False
     mtbits = ["-Empty-"]
     struc20 = [6, 5, 3, 4]
     struc25 = [8, 6, 4, 6]
@@ -1282,17 +1311,35 @@ def mechgen(name, file, isprotag=False):
     strucdict = {100:struc100, 95:struc95, 90:struc90, 85:struc85, 80:struc80, 75:struc75, 70:struc70, 65:struc65, 60:struc60, 55:struc55, 50:struc50, 45:struc45, 40:struc40, 35:struc35, 30:struc30, 25:struc25, 20:struc20}
     armdict = {}
     hdslots = {}
-    mechfile = open(file, "r")
+    mechname = "James"
+    mechfile = open(file, "r", errors="ignore")
     mechdata = mechfile.readlines()
     #if not mechdata[4] == "Config:Biped\n":
     #    raise Exception("Only Battlemechs please, no quads or tris!")
-    mechname = mechdata[2].removesuffix("\n")
+    #mechname = mechdata[2].removesuffix("\n")
     for idx, item in enumerate(mechdata):
         pos = mechdata.index(item)
+        if item.lower().startswith("chassis:"):
+            item = item.removeprefix("chassis:")
+            mechnamepart1 = item[:-1]
+            #print(mechnamepart1)
+            continue
+        if item.lower().startswith("model:"):
+            item = item[6:-1]
+            mechnamepart2 = item
+            #print(mechnamepart2)
         if item.lower().startswith("mass"):
             tonnage = int(item.removesuffix("\n")[-2:])
             #print(tonnage)
+            if tonnage == 0: tonnage = 100
             struc=strucdict[tonnage]
+        if item.lower().startswith("heat sinks"):
+            if "double" in item.lower():
+                isdouble=True
+                #print("Double")
+            else:
+                isdouble=False
+                #print("Single")
             #print(struc)
         if item.lower().startswith("armor"):
             for i in range(11):
@@ -1342,7 +1389,8 @@ def mechgen(name, file, isprotag=False):
             walk = int(item[8:])
         if item.startswith("model:"):
             mechname = item[6:-1]
-            print(mechname)
+            #print(mechname)
+    mechname = mechnamepart1 + " " + mechnamepart2
     if isprotag:
         t=0
         print("Please enter your 'Mech's 4/5 BV")
@@ -1352,18 +1400,18 @@ def mechgen(name, file, isprotag=False):
                 BV = int(BV)
                 break
             except ValueError:
-                if t==0:print("Please make sure it's just a plain ol' integer.")
-                elif t==1:print("Please just write a normal number, no commas or decimals, nothing like that")
-                elif t==2:print("Come on man, you gotta be screwing with me.")
-                elif t==3:print("Alright listen, it's not that fucking hard. Just write. A fucking. NUMBER.")
+                if t==0: print("Please make sure it's just a plain ol' integer.")
+                elif t==1: print("Please just write a normal number, no commas or decimals, nothing like that")
+                elif t==2: print("Come on man, you gotta be screwing with me.")
+                elif t==3: print("Alright listen, it's not that fucking hard. Just write. A fucking. NUMBER.")
                 elif t==4 and BV.lower() == "a fucking. number.":
                     print("Come on man, just- Fucking hell you knew what I meant.")
                     continue
-                elif t==4:print("Do you know what a number is? Can you just not think of one? Well there's a number for you, 1. Use it.")
-                elif t==5 and BV == "1.":print("You're a clever fucker, aren't you?")
+                elif t==4: print("Do you know what a number is? Can you just not think of one? Well there's a number for you, 1. Use it.")
+                elif t==5 and BV == "1.": print("You're a clever fucker, aren't you?")
                 elif t==5:print("No? That one's not good enough, is it? Christ you're a twat.")
-                elif t==6:print("You're still here? Really? Bugger me, do you have nothing else to do? Just check your bloody Battlemech already. It's serious business you know.")
-                else:print("I'm not doing this anymore. You know what I want, just do it or leave.")
+                elif t==6: print("You're still here? Really? Bugger me, do you have nothing else to do? Just check your bloody Battlemech already. It's serious business you know.")
+                else: print("I'm not doing this anymore. You know what I want, just do it or leave.")
                 t+=1
     else:
         BV = 20
@@ -1376,7 +1424,7 @@ def mechgen(name, file, isprotag=False):
     mechlt = MechPartBig(f"{mechname} LT", armdict["lt"], armdict["rtl"], struc[1], lt["slot1"], lt["slot2"], lt["slot3"], lt["slot4"],lt["slot5"], lt["slot6"], lt["slot7"], lt["slot8"], lt["slot9"], lt["slot10"], lt["slot11"], lt["slot12"])
     mechrt = MechPartBig(f"{mechname} RT", armdict["rt"], armdict["rtr"], struc[1], rt["slot1"], rt["slot2"], rt["slot3"], rt["slot4"],rt["slot5"], rt["slot6"], rt["slot7"], rt["slot8"], rt["slot9"], rt["slot10"], rt["slot11"], rt["slot12"])
     mechct = MechPartBig(f"{mechname} CT", armdict["ct"], armdict["rtc"], struc[0], ct["slot1"], ct["slot2"], ct["slot3"], ct["slot4"], ct["slot5"], ct["slot6"], ct["slot7"], ct["slot8"], ct["slot9"], ct["slot10"], ct["slot11"], ct["slot12"])
-    mech = Battlemech(mechname, mechhead, mechla, mechra, mechll, mechrl, mechrt, mechlt, mechct, genericmechwarrior, walk, tonnage)
+    mech = Battlemech(mechname, mechhead, mechla, mechra, mechll, mechrl, mechrt, mechlt, mechct, genericmechwarrior, walk, tonnage, case1, case2, isdouble)
     print(f"Initializing {mechname} took {time.time()-strt} seconds")
     return mech
 def simulator(simulcnt, protag, atk, dfnd):
@@ -1390,6 +1438,7 @@ def simulator(simulcnt, protag, atk, dfnd):
     turnsdmg = {f"turn{i+1}":[] for i in range(12)}
     #print(turnsdmg)
     #print(tmms)
+    dfndname = dfnd.name
     deathturn = []
     defdeathturn = []
     CoDs = {"HKill":0, "PKill":0, "EKill":0, "CTKill":0, "AmmoKill":0, "Survived":0}
@@ -1464,20 +1513,24 @@ def simulator(simulcnt, protag, atk, dfnd):
     try:
         for k, v in heatturn.items():
             heatturn[k] = mean(v)
-    except: pass
-    print(f"MeanProtagDeathTurn : {mean(deathturn)}")
+    except:
+        pass
+    print(f"Mean {protag.name} Death Turn : {mean(deathturn)}")
     print(CoDs)
     print(f"TMMs : {tmms}")
-    print(f"Damage per shot : {mean(dmgpershot)}")
+    try:
+        print(f"Damage per shot : {mean(dmgpershot)}")
+    except:
+        pass
     print(f"Mean Damage per turn : {turnsdmg}")
     print(f"Total Mean DMG : {totmeandmg}")
     print(f"Crits per Game : {mean(critspergame)}")
-    print(wepsfired)
-    print(heatturn)
-    print(f"MeanDefDeathTurn : {mean(defdeathturn)}")
-    print(defCoDs)
+    print(f"Weapons fired each turn: {wepsfired}")
+    print(f"Heat per turn {heatturn}")
+    print(f"Mean {dfndname} Death Turn: {mean(defdeathturn)}")
+    print(f"Causes of death for {dfndname}: {defCoDs}")
     print(f"Program ran in {time.time()-starttime} seconds!")
-    print(protag.sinking)
+    # print(protag.sinking)
 
     #print(mechdata)
 files = os.listdir()
@@ -1550,5 +1603,10 @@ protag = mechgen("Silly Lad", protagonist, True)
 #print(protag.la.slot3 is protag.la.slot4)
 defender = mechgen("Fodder", target, False)
 
-simulator(10000, protag, atk, defender)
+try:
+    print(getattr(Battlemech, "isexplosive"))
+except:
+    pass
+simulator(1000, protag, atk, defender)
 #print(islrm15.ratio)
+#print("merry christmas!")
