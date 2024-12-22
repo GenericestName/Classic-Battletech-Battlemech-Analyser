@@ -1,6 +1,6 @@
 import random, math, pathlib, copy, time, os
 from natsort import natsorted
-from statistics import mean
+from statistics import mean, median
 from statistics import stdev
 from math import floor
 import statistics
@@ -8,36 +8,29 @@ StartTime = time.time()
 
 
 def dooverflow(part, target=None):
-    if part.name.lower()[-2:] == "hd":
+    # print(f"Overflowing from {part.name}")
+    if part is target.hd:
         if target.causeofdeath == "":target.causeofdeath = "HKill"
         return "Mech Destroyed"
     elif part.name.lower()[-2] == "l":
-        if part.name.lower()[-1] == "t":
+        if part is target.lt:
             return target.ct
-        else:
+        elif part is target.ll or part is target.la:
             return target.lt
     elif part.name.lower()[-2] == "r":
-        if part.name.lower()[-1] =="t":
+        if part is target.rt:
             return target.ct
-        else:
+        elif part is target.rl or part is target.ra:
             return target.rt
-    elif part.name.lower()[-2] == "c":
+    elif part is target.ct:
         if target.causeofdeath == "":target.causeofdeath = "CTKill"
         return "Mech Destroyed"
     else:
         print("OVERFLOW ERROR")
         return
 
-def RollLocation(Float=True, HasCrit=False, Debug=False):
-    Roll1 = random.randint(1, 6)
-    if Debug:
-        print(Roll1)
-    Roll2 = random.randint(1, 6)
-    if Debug:
-        print(Roll2)
-    Location = Roll1+Roll2
-    if Debug:
-        print(Location)
+def RollLocation(Float=False, HasCrit=False, Debug=False):
+    Location = random.randint(1, 6) + random.randint(1, 6)
     if Location == 12:
         return "HD", HasCrit
     elif Location == 10 or Location == 11:
@@ -58,7 +51,7 @@ def RollLocation(Float=True, HasCrit=False, Debug=False):
         if not Float or Float and HasCrit:
             return "CT", HasCrit
         elif Float and not HasCrit:
-            return RollLocation(True, True)
+            return RollLocation(False, True)
 
 print(f"{time.time()}")
 
@@ -117,6 +110,36 @@ class MechUtility:
         self.hasexpanded = False
         self.isengine = isengine
         self.isgyro = isgyro
+        self.owner = None
+
+    def parthit(self, crit):
+        self.isdamaged = True
+        return
+
+class Engine(MechUtility):
+    def __init__(self, name, slots=1, isdamaged=False, isengine=False, ids=[], owner=None):
+        self.name = name
+        self.slots = slots
+        self.ids = ids
+        self.isdamaged = isdamaged
+        self.hasexpanded = False
+        self.isengine = isengine
+        self.owner = owner
+
+    def parthit(self, crit):
+        if self.isdamaged:
+            return
+        self.isdamaged = True
+        a = getattr(self.owner, "owner")
+        #print(f"{a.name} suffered an engine hit!")
+        num = getattr(a, "enginehits")
+        num +=1
+        setattr(a, "enginehits", num)
+        if getattr(a, "enginehits") >= 3:
+            setattr(a, "isdead", True)
+            #print(a.name, "Fucking died!")
+            return
+        return
 
 class HeatSink:
     def __init__(self, name, sinking = 1, slots = 1, isdamaged = False, ids=[]):
@@ -127,6 +150,11 @@ class HeatSink:
         self.isdamaged = isdamaged
         self.sinking = sinking
 
+    def parthit(self, crit):
+        self.isdamaged = 0
+        self.sinking = 0
+        return
+
 class JumpJet(MechUtility):
     def __init__(self, name, slots=1, ids=[], jumping=1):
         self.name = name
@@ -134,6 +162,11 @@ class JumpJet(MechUtility):
         self.isdamaged = False
         self.ids = ids
         self.jumping = int(jumping)
+
+    def parthit(self, crit):
+        self.isdamaged = True
+        self.jumping = 0
+        return
 
 class AmmoBin(MechUtility):
     def __init__(self, name, ammonum, slots=1, isexplosive = True, damageperammo = 2, isdamaged=False, ids=[]):
@@ -145,14 +178,17 @@ class AmmoBin(MechUtility):
         self.isexplosive = isexplosive
         self.damageperammo = damageperammo
         self.location = ()
-    def parthit(self, mek):
-        if self.isexplosive and not self.ammonum == 0:
+    def parthit(self, crit):
+        if self.isexplosive and not self.ammonum == 0 and crit and not self.isdamaged:
             explosiondamage = self.ammonum*self.damageperammo
+            self.ammonum = 0
             self.isdamaged = True
             #print("BOOM!")
             return explosiondamage
         else:
+            self.ammonum = 0
             self.isdamaged = True
+            self.damageperammo = 0
             return 0
 class MechPart:
 
@@ -169,6 +205,8 @@ class MechPart:
         self.slot6 = slot6
         self.isdestroyed = isdestroyed
         self.ishead = ishead
+        self.hasengine = False
+        self.eslots = []
         self.blasters = []
         self.hasammo = False
         self.ammoslots = []
@@ -179,7 +217,27 @@ class MechPart:
         #self.multislot()
         self.listweps()
         self.slshit = []
+        self.owner = None
+        #selt.slotstents = list(for i in range(len(self.slotqdir)))
 
+    def dopartdestruction(self):
+        self.armour = 0
+        self.structure = 0
+        self.isdestroyed = True
+        for i in self.slotqdir:
+            i = getattr(self, i)
+            if type(i) is str or i is None:
+                continue
+            i.parthit(False)
+        #print("Engine Hit due to Torso Destruction!")
+
+
+    def declareownership(self):
+        for i in self.slotqdir:
+            a = getattr(self, i)
+            if hasattr(a, "owner"):
+                setattr(a, "owner", self)
+                #print(f"{self.name} declared {i} ({a}) as its babbie!")
     def listweps(self):
         for attr in self.slotqdir:
             attrvalue = getattr(self, attr)
@@ -193,6 +251,10 @@ class MechPart:
             if isinstance(attrvalue, JumpJet):
                 self.jetslots.append(attr)
                 self.hasjets = True
+            if isinstance(attrvalue, Engine):
+                self.hasengine = True
+                attrvalue.owner = self
+                self.eslots.append(attr)
 
     def multislot(self, newdic={}):
         #if isinstance(self, MechPartBig):
@@ -251,45 +313,48 @@ class MechPart:
 
     def TakeDamage(self, dmg, hascrit=False, mekself=None):
         overspill = 0
+        if dmg <= 0 or self.isdestroyed or self.owner.isdead:
+            return 0
         if self.armour > 0:
+            # print(f"{self.name} has {self.armour} armour left, and is taking {dmg} damage!")
             self.armour -= dmg
             if self.armour < 0:
-                overspill = abs(self.armour)
+                #print(f"Overspilling {abs(self.armour)} from {dmg} attack!")
+                dmg = abs(self.armour)
                 self.armour = 0
-                self.structure -= overspill
-                #print(f"{self.name} took {dmg-overspill} damage! {self.name}'s armour was stripped and the structure took {overspill} damage!")
-                critnum = docriticals()
-                if critnum > 0:
-                    mekself.critsthisturn+=1
-                    crit(self, critnum, mekself)
-                if self.structure <= 0:
-                    self.isdestroyed = True
-                    if abs(self.structure) > 0:
-                        overspill = abs(self.structure)
-                        #print(overspill)
-                        return overspill
-                    return 0
-                else:
-                    return 0
             else:
-                #print(f"{self.name} took {dmg} armour damage!")
                 return 0
-        elif not self.armour > 0:
+        if self.armour <= 0:
+            if self.structure <= 0:
+                #print("Weird")
+                if self.structure < 0:
+                    #print("Weirder")
+                    print(self.structure, dmg, self.name)
             self.structure -= dmg
+            # print(f"{self.name} is taking {dmg} struc dmg!")
             #print(f"{self.name} took {dmg} structure damage!")
             critnum = int(docriticals())
-            if critnum > 0:crit(self, critnum, mekself)
             if self.structure > 0:
+                if critnum > 0:
+                    crit(self, critnum, mekself)
                 return 0
             if self.structure == 0:
                 self.isdestroyed = True
+                if critnum > 0:
+                    crit(self, critnum, mekself)
                 return 0
             if self.structure < 0:
+                dmg = abs(self.structure)
                 self.isdestroyed = True
-                overspill = abs(self.structure)
+                if self is self.owner.hd or self is self.owner.ct:
+                    self.isdestroyed = True
+                    self.owner.isdead = True
+                    return 0
+                if critnum > 0:
+                    crit(self, critnum, mekself)
                 self.structure = 0
                 #print(overspill)
-                return overspill
+                return dmg
 
 
 
@@ -320,9 +385,12 @@ class MechPartBig(MechPart):
         self.jetslots = []
         self.hasjets = False
         self.hasweps = False
+        self.hasengine = False
+        self.eslots = []
         self.qdir = list(a for a in dir(self) if not a.startswith('__'))
         self.slotqdir = list(a for a in dir(self) if a.startswith("slot"))
         self.slotqdir = natsorted(self.slotqdir)
+        self.owner = None
         #self.multislot()
         #self.listweps()
 
@@ -374,6 +442,16 @@ class Weapon(object):
         self.isdamaged = False
         self.hit = False
         self.ids = ids
+    
+    def parthit(self, crit):
+        self.dmg = 0
+        if self.isexplosive and not self.isdamaged:
+            self.isdamaged = True
+            return self.xplodmg
+        self.isdamaged = True
+        if self.isexplosive and self.isdamaged:
+            self.xplodmg = 0
+            return self.xplodmg
     def shoot(self):
         if self.hasfired:
             #print("Fuc")
@@ -455,8 +533,33 @@ class Autocannon(Weapon):
         self.hasfired = True
         return self.dmg, self.ammo, self.cluster
 
+
+class VariableWep(Weapon):
+    def __init__(self, name, srange, mrange, lrange, dmg, heat, damage_type=None, BV=0, slots=1, targetmod=0, minrange=0, ammo=None, cluster=None, isexplosive=False, xplodmg=0, grouping=None, ids=[]):
+        self.name = name
+        self.minrange = minrange
+        self.srange = srange
+        self.hasexpanded = False
+        self.mrange = mrange
+        self.lrange = lrange
+        self.dmg = dmg
+        self.heat = heat
+        self.BV = BV
+        self.slots = slots
+        self.xplodmg = xplodmg
+        self.targetmod = targetmod
+        self.damage_type = damage_type
+        self.isexplosive = isexplosive
+        self.hasfired = False
+        self.ammo = ammo
+        self.cluster = cluster
+        self.ratio = 0
+        self.ratiocalc(dmg, heat)
+        self.isdamaged = False
+        self.hit = False
+        self.ids = ids
 class Battlemech:
-    def __init__(self, name, head, la, ra, ll, rl, rt, lt, ct, pilot, walkspeed, tonnage, case1=False, case2=False, doublesink=False):
+    def __init__(self, name, head, la, ra, ll, rl, rt, lt, ct, pilot, walkspeed, tonnage, case1=False, case2=False, doublesink=False, bv=0):
         self.name = name
         self.hd = head
         self.la = la
@@ -466,6 +569,7 @@ class Battlemech:
         self.rt = rt
         self.lt = lt
         self.ct = ct
+        self.bv = bv
         self.pilot = pilot
         self.maxwalkspeed = walkspeed
         self.maxrunspeed =int(math.ceil(walkspeed*1.5))
@@ -475,6 +579,7 @@ class Battlemech:
         self.enginerating = tonnage*walkspeed
         self.heat = 0
         self.heatunsinked = 0
+        self.sinkingdoubled = False
         self.currentheatmod = 0
         self.isdead = False
         self.enginehits = 0
@@ -484,7 +589,7 @@ class Battlemech:
         self.sensorhits = 0
         self.isimmobile = False
         self.jumpspeed = 0
-        self.movementmod=0
+        self.movementmod = 0
         self.sinking=0
         self.doublesink = doublesink
         self.psrmalusperm = 0
@@ -506,11 +611,25 @@ class Battlemech:
         self.hiphits = 0
         self.basesinking = int(self.enginerating / 25)
         self.sinkingcalculator()
-        self.parts = ["la", "ra", "ll", "rl", "rt", "lt", "ct"]
+        self.parts = ["la", "ra", "ll", "rl", "rt", "lt", "ct", "hd"]
         #self.wepsandammogetter()
         self.motives = {}
         self.turn = 0
         self.multislot()
+        self.setownership()
+
+    def setownership(self):
+        for i in self.parts:
+            part = getattr(self, i)
+            setattr(part, "owner", self)
+            #print(f"{self.name} has now declared ownership over {i}!")
+            part.declareownership()
+
+    def printer(self):
+        for i in self.parts:
+            i = getattr(self, i)
+            print(f"{i.name}\n Armour: {i.armour}\nStructure: {i.structure}")
+        print(self.causeofdeath)
 
     def multislot(self):
         larm = self.la.multislot()
@@ -524,7 +643,7 @@ class Battlemech:
                 self.lt.multislot(i)
         for i in rls:
             if len(i) != 0:
-                self.lt.multislot(i)
+                self.rt.multislot(i)
         lefttorso = self.lt.multislot()
         righttorso = self.rt.multislot()
         tls = [righttorso, lefttorso]
@@ -582,11 +701,15 @@ class Battlemech:
     def shutdown(self, target, guaranteed):
         pass
 
-    def move(self, evading=False, enemy=None):
+    def move(self, evading=False, enemy=None, isrunning=False):
         self.motivecalc()
         if not evading:
-            self.movementmod=1
-            self.heat +=1
+            if isrunning:
+                self.movementmod = 2
+                self.heat += 2
+            else:
+                self.movementmod=1
+                self.heat +=1
         lranges = []
         mranges = []
         sranges = []
@@ -677,6 +800,8 @@ class Battlemech:
 
 
     def resolvedamage(self, dmg, location, hascrit=False):
+        if self.isdead and self.causeofdeath != "":
+            return
         if self.hd.isdestroyed:
             self.isdead = True
             self.causeofdeath = "HKill"
@@ -687,12 +812,10 @@ class Battlemech:
             return
         if self.lt.isdestroyed:
             self.la.isdestroyed = True
-            self.la.structure = 0
-            self.la.armour = 0
+            self.la.dopartdestruction()
         if self.rt.isdestroyed:
             self.ra.isdestroyed = True
-            self.ra.structure = 0
-            self.ra.armour = 0
+            self.ra.dopartdestruction()
         if dmg == 0:
             return
         if location == self.hd:
@@ -701,11 +824,23 @@ class Battlemech:
                 self.isdead = True
                 self.causeofdeath = "PKill"
         o = location.TakeDamage(dmg, hascrit, self)
+        if getattr(location, "hasengine") and not location is self.ct and getattr(location, "isdestroyed"):
+            location.dopartdestruction()
+            if self.isdead and self.causeofdeath == "":
+                self.causeofdeath = "TorsoEKill"
+                return
+            if self.isdead:
+                return
         if o > 0:
             newloc = dooverflow(location, self)
             #print(newloc)
             if newloc == "Mech Destroyed":
                 self.isdead = True
+                if location == self.ct:
+                    self.causeofdeath = "CTKill"
+                elif location is self.hd:
+                    self.causeofdeath = "HKill"
+                return
                 #print("Dead as fuck BROOOO")
             else:
                 newloc = getattr(self, newloc.name.lower()[-2:])
@@ -716,20 +851,29 @@ class Battlemech:
         pass
     def heatresolution(self):
         if self.isdead: return
+        self.currentheatmod = 0
         self.sinkingcalculator()
-        #print(self.name, self.heat, self.sinking)
+        # print(self.name, self.heat, self.sinking)
         self.heat = self.heat - self.sinking
         self.walkspeed = self.maxwalkspeed - (int(self.heat/5))
         self.runspeed = math.ceil(self.walkspeed * 1.5)
         self.heatmalus = 0
         if self.heat == 30:
-            self.shutdown()
+            self.shutdown(self, True)
+        if  7 < self.heat < 12:
+            self.currentheatmod = 1
+        elif 12 < self.heat < 17:
+            self.currentheatmod = 2
+        elif 16 < self.heat < 24:
+            self.currentheatmod = 3
+        elif 23 < self.heat:
+            self.currentheatmod = 4
         if self.heat < 0:
             self.heat = 0
         #print(self.heat)
         #elif 30 > self.heat >
 
-    def barrage(self, target, alphastrike=False, heatneutral=False, range=1):
+    def barrage(self, target, alphastrike=False, heatneutral=False, range=1, istest=False, allhit=False):
         self.wepsfired = []
         self.wepsandammogetter()
         #print(self.weplist)
@@ -767,26 +911,55 @@ class Battlemech:
             wep= getattr(loc, slot)#:3#
             if wep.lrange < range:
                 continue
+            if allhit and not wep.hasfired and not wep.isdamaged:
+                dmgtester(wep, self, target, allhit)
+                wep.hasfired = True
+                continue
             if range==1 and not wep.hasfired and not wep.isdamaged:
+                if istest:
+                    dmgtester(wep, self, target)
+                    wep.hasfired = True
+                    continue
                 fire(range, wep, self.pilot.gskill, False, self.currentheatmod, self.movementmod, self, target)
                 wep.hasfired = True
                 continue
             shotht = wep.heat + self.heat - self.sinking
+            #print(wep.heat, self.heat, self.sinking, shotht)
             if shotht < 8 and not alphastrike and not wep.hasfired and not wep.isdamaged and not heatneutral:
+                if istest:
+                    dmgtester(wep, self, target)
+                    wep.hasfired = True
+                    continue
                 exec(f"fire(range, wep, self.pilot.gskill, False, self.currentheatmod, self.movementmod, self, target)")
+                if istest:
+                    print("Firinig for real even tho is test!")
                 wep.hasfired = True
                 continue
             elif shotht >= 8 and not alphastrike and not wep.hasfired and not wep.isdamaged and not heatneutral:
                 #print(f"Leaving {wep.name} off to save heat!")
                 continue
             if heatneutral:
-                if shotht < 4 and not alphastrike and not wep.hasfired and not wep.isdamaged and heatneutral:
+                if shotht < 4 and not wep.hasfired and not wep.isdamaged and heatneutral:
+                    if istest:
+                        dmgtester(wep, self, target)
+                        wep.hasfired  =True
+                        continue
                     exec(f"fire(range, wep, self.pilot.gskill, False, self.currentheatmod, self.movementmod, self, target)")
+                    if istest:
+                        print("Firinig for real even tho is test!")
                     wep.hasfired = True
                     continue
+                if shotht > 3 or wep.hasfired:
+                    continue
             if alphastrike:
-                if shotht < 29 and alphastrike and not heatneutral and not wep.hasfired and not wep.isdamaged:
+                if shotht < 30 and alphastrike and not heatneutral and not wep.hasfired and not wep.isdamaged:
+                    if istest:
+                        dmgtester(wep, self, target)
+                        wep.hasfired  =True
+                        continue
                     exec(f"fire(range, wep, self.pilot.gskill, False, self.currentheatmod, self.movementmod, self, target)")
+                    if istest:
+                        print("Firinig for real even tho is test!")
                     wep.hasfired = True
                     continue
             else:
@@ -802,8 +975,9 @@ class Battlemech:
 
     def sinkingcalculator(self):
         sinkslist = []
-        if self.doublesink:
+        if self.doublesink and not self.sinkingdoubled:
             self.basesinking = self.basesinking * 2
+            self.sinkingdoubled = True
         heatsinkssinking = 0
         for attr in self.qdir:
             attrval = getattr(self, attr)
@@ -833,7 +1007,7 @@ class Battlemech:
             self.weightclass = "Superheavy"
         else:
             return
-    def useammo(self, wep):
+    def useammo(self, wep=None, adding=False):
         # print("Using Ammo")
         firedgood = False
         # print(wep.name)
@@ -843,7 +1017,7 @@ class Battlemech:
             loc = getattr(self ,loc)
             ammo = getattr(loc, slot)
             # print(ammo.name, wep.ammo)
-            if ammo.name.strip() == wep.ammo.strip():
+            if not wep is None and ammo.name.strip() == wep.ammo.strip():
                 if ammo.ammonum > 0:
                     # print(ammo.ammonum)
                     # print(f"{wep.name} fired!")
@@ -851,9 +1025,13 @@ class Battlemech:
                     #print(ammo.ammonum)
                     firedgood = True
                     return firedgood
+            elif adding:
+                ammo.ammonum+=1
             else:
                 # print(ammo.name, "is not", wep.ammo)
                 continue
+        if adding:
+            return
         return firedgood
 
 
@@ -864,7 +1042,7 @@ class Battlemech:
 heatsink = HeatSink("Single Heatsink", ids=["Heat Sink"])
 isdoubleheatsink = HeatSink("Double Heatsink", 2, 3, ids=["ISDoubleHeatSink", "IS Double Heat Sink", "ISDouble Heat Sink"])
 clandoubleheatsink = HeatSink("Double Heatsink", 2, 2, ids=["CLDoubleHeatSink", "Clan Double Heat Sink", "CLDouble Heat Sink"])
-fusengine = MechUtility("Fusion Engine", 1, False, True, ids=["Fusion Engine"])
+fusengine = Engine("Fusion Engine", 1, False, True, ids=["Fusion Engine"])
 gyro = MechUtility("Gyro", 1, False, False, True, ids=["Gyro"])
 jumpjet = JumpJet("Jump Jet", ids=["Jump Jet", "JumpJet"])
 #MechUtils = {"Gyro":gyro, "Fusion Engine":fusengine, "Heat Sink":heatsink, "ISDouble Heat Sink":isdoubleheatsink, "CLDoubleHeatSink (omnipod)":clandoubleheatsink, "CLDoubleHeatSink":clandoubleheatsink}
@@ -897,6 +1075,7 @@ isplargelaser = Weapon("Large Pulse Laser", 3, 7, 10, 9, 10, "P", 119, 2, -2, id
 clanplargelaser = Weapon("Large Pulse Laser", 6, 14, 20, 10, 10, "P", 265, 2, (-2), ids=["CLLargePulseLaser", "Clan Pulse Large Laser","Clan Large Pulse Laser"])
 erplargelaser = Weapon("ER Large Pulse Laser", 7, 15, 23, 10, 13, "P", 272, 3, (-1), ids=["CLERLargePulseLaser", "Clan ER Pulse Large Laser","Clan ER Large Pulse Laser"])
 mediumlaser = Weapon("Medium Laser", 3, 6, 9, 5, 3, "DE", 46, ids=["Medium Laser", "IS Medium Laser", "ISMediumLaser"])
+heavymedlaser = Weapon("Heavy Medium Laser", 3, 6, 9, 10, 7, "DE", 76, 2, (+1), ids=["CLHeavyMediumLaser", "Clan Medium Heavy Laser"])
 ispmediumlaser = Weapon("Medium Pulse Laser", 2, 4, 6, 6, 4, "P", 48, 1, (-2), ids=["ISMediumPulseLaser", "IS Pulse Med Laser", "IS Medium Pulse Laser"])
 clanpmediumlaser = Weapon("Medium Pulse Laser", 4, 8, 12, 7, 4, "P", 111, 1, (-2), ids=["CLMediumPulseLaser", "Clan Pulse Med Laser", "Clan Medium Pulse Laser"])
 isermediumlaser = Weapon("ER Medium Laser", 4, 8, 12, 5, 5, "DE", 62, ids=["ISERMediumLaser", "IS ER Medium Laser"])
@@ -908,14 +1087,15 @@ clanpsmalllaser = Weapon("Small Pulse Laser", 2, 4, 6, 3, 2, "P", 24, 1, (-2), i
 clanersmalllaser = Weapon("ER Small Laser", 2, 4, 6, 5, 2, "DE", 31, ids=["CLERSmallLaser", "Clan ER Small Laser"])
 isersmalllaser = Weapon("ER Small Laser", 2, 4, 5, 3, 2, "DE", 17, ids=["ISERSmallLaser", "IS ER Small Laser"])
 erpsmalllaser = Weapon("ER Small Pulse Laser", 2, 4, 6, 5, 3, None, 36, 1, (-1), ids=["CLERSmallPulseLaser", "Clan ER Pulse Small Laser", "Clan ER Small Pulse Laser", "ClanERSmallPulseLaser"])
-Lasers = [largelaser, iserlargelaser, clanerlargelaser, isplargelaser, clanplargelaser, erplargelaser, mediumlaser, ispmediumlaser, clanpmediumlaser, isermediumlaser, clanermediumlaser, erpmediumlaser, smalllaser, ispsmalllaser, clanpsmalllaser, clanersmalllaser, isersmalllaser, erpsmalllaser]
+Lasers = [largelaser, iserlargelaser, clanerlargelaser, isplargelaser, clanplargelaser, erplargelaser, mediumlaser, heavymedlaser, ispmediumlaser, clanpmediumlaser, isermediumlaser, clanermediumlaser, erpmediumlaser, smalllaser, ispsmalllaser, clanpsmalllaser, clanersmalllaser, isersmalllaser, erpsmalllaser]
 
 # PPCs
 ppc = Weapon("PPC", 6, 12, 18, 10, 10, "DE", 176, 3, 0, 3, ids=["PPC", "Particle Cannon", "IS PPC", "ISPPC"])
 iserppc = Weapon("ERPPC", 7, 14, 23, 10, 15, "DE", 228, 3, 0, 0, ids=["ISERPPC", "IS ER PPC"])
 clanerppc = Weapon("ERPPC", 7, 14, 23, 15, 15, "DE", 412, 2, 0, 0, ids=["CLERPPC", "Clan ER PPC"])
 heavyppc = Weapon("Heavy PPC", 6, 12, 18, 15, 15, "DE", 317, 4, 0, 3, ids=["Heavy PPC", "ISHeavyPPC", "ISHPPC"])
-PPCs = [ppc, clanerppc, heavyppc, iserppc]
+lightppc = Weapon("Light PPC", 6, 12, 18, 5, 5, "DE", 88, 2, 0, 3, ids=["Light PPC", "ISLightPPC", "ISLPPC"])
+PPCs = [ppc, clanerppc, heavyppc, iserppc, lightppc]
 
 # Ballistics
 machinegun = Autocannon("Machine Gun", 1, 2, 3, 2, 0, "AI", 20, 1, 0, 0, "MG Ammo", ids=["Machine Gun", "IS Machine Gun", "ISMachine Gun", "ISMG", "CLMG", "Clan Machine Gun"])
@@ -944,19 +1124,19 @@ islrm10 = Missile("LRM 10", 7, 14, 21, 1, 4, "Cluster", 90, 2, 0, 6, "LRM10 Ammo
 clanlrm10 = Missile("LRM 10", 7, 14, 21, 1, 4, "Cluster", 109, 1, 0, 0, "LRM10 Ammo", 10, 0, 5, ids=["CLLRM10", "Clan LRM-10", "Clan LRM 10"])
 islrm15 = Missile("LRM 15", 7, 14, 21, 1, 5, "Cluster", 136, 3, 0, 6, "LRM15 Ammo", 15, 0, 5, ids=["LRM 15", "IS LRM-15", "ISLRM15", "IS LRM 15"])
 clanlrm15 = Missile("LRM 15", 7, 14, 21, 1, 5, "Cluster", 164, 2, 0, 0, "LRM15 Ammo", 15, 0, 5, ids=["CLLRM15", "Clan LRM-15", "Clan LRM 15"])
-islrm20 = Missile("LRM 20", 7, 14, 21, 1, 6, "Cluster", 181, 4, 0, 6, "LRM20 Ammo", 20, 0, 5, ids=["LRM 20", "IS LRM-20", "ISLRM20", "IS LRM 20"])
-clanlrm20 = Missile("LRM 20", 7, 14, 21, 1, 6, "Cluster", 236, 3, 0, 0, "LRM20 Ammo", 20, 0, 5, ids=["CLLRM20", "Clan LRM-20", "Clan LRM 20"])
+islrm20 = Missile("LRM 20", 7, 14, 21, 1, 6, "Cluster", 181, 5, 0, 6, "LRM20 Ammo", 20, 0, 5, ids=["LRM 20", "IS LRM-20", "ISLRM20", "IS LRM 20"])
+clanlrm20 = Missile("LRM 20", 7, 14, 21, 1, 6, "Cluster", 236, 4, 0, 0, "LRM20 Ammo", 20, 0, 5, ids=["CLLRM20", "Clan LRM-20", "Clan LRM 20"])
 MechMissiles = [srm2, isssrm2, clanssrm2, srm4, isssrm4, clanssrm4, issrm6, clansrm6, isssrm6, clanssrm6, islrm5, clanlrm5, islrm10, clanlrm10, islrm15, clanlrm15, islrm20, clanlrm20]
 # 'Mech Bits
-awesomehead8q = MechPart("Awesome HD", 9, 3, "Life Support", "Sensors", "Cockpit", copy.deepcopy(smalllaser), "Sensors", "Life Support", False, True)
-awesomeleftleg8q = MechPart("Awesome LL", 33, 17, "Hip", "Upper Leg", "Lower Leg", "Foot", copy.deepcopy(heatsink), copy.deepcopy(heatsink))
-awesomerightleg8q = MechPart("Awesome RL", 33, 17, "Hip", "Upper Leg", "Lower Leg", "Foot", copy.deepcopy(heatsink), copy.deepcopy(heatsink))
-awesomerightarm8q = MechPartBig("Awesome RA", 24, 0, 13, "Shoulder", "Upper Arm", "Lower Arm", copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(ppc))
-awesomeleftarm8q = MechPartBig("Awesome LA", 24, 0, 13, "Shoulder", "Upper Arm", "Lower Arm", "Hand")
-awesomerighttorso8q = MechPartBig("Awesome RT", 24, 10, 17, copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(ppc))
-awesomelefttorso8q = MechPartBig("Awesome LT", 24, 10, 17, copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(ppc))
-awesomecentretorso8q = MechPartBig("Awesome CT", 30, 19, 25, copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(gyro), copy.deepcopy(gyro), copy.deepcopy(gyro), copy.deepcopy(gyro), copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(heatsink), copy.deepcopy(heatsink))
-thunderbolt5srightarm = MechPartBig("Thunderbolt RA", 20, 0, 10, "Shoulder", "Upper Arm", "Lower Arm", "Hand", copy.deepcopy(largelaser))
+#awesomehead8q = MechPart("Awesome HD", 9, 3, "Life Support", "Sensors", "Cockpit", copy.deepcopy(smalllaser), "Sensors", "Life Support", False, True)
+#awesomeleftleg8q = MechPart("Awesome LL", 33, 17, "Hip", "Upper Leg", "Lower Leg", "Foot", copy.deepcopy(heatsink), copy.deepcopy(heatsink))
+#awesomerightleg8q = MechPart("Awesome RL", 33, 17, "Hip", "Upper Leg", "Lower Leg", "Foot", copy.deepcopy(heatsink), copy.deepcopy(heatsink))
+#awesomerightarm8q = MechPartBig("Awesome RA", 24, 0, 13, "Shoulder", "Upper Arm", "Lower Arm", copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(ppc))
+#awesomeleftarm8q = MechPartBig("Awesome LA", 24, 0, 13, "Shoulder", "Upper Arm", "Lower Arm", "Hand")
+#awesomerighttorso8q = MechPartBig("Awesome RT", 24, 10, 17, copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(ppc))
+#awesomelefttorso8q = MechPartBig("Awesome LT", 24, 10, 17, copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(heatsink), copy.deepcopy(ppc))
+#awesomecentretorso8q = MechPartBig("Awesome CT", 30, 19, 25, copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(gyro), copy.deepcopy(gyro), copy.deepcopy(gyro), copy.deepcopy(gyro), copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(fusengine), copy.deepcopy(heatsink), copy.deepcopy(heatsink))
+#thunderbolt5srightarm = MechPartBig("Thunderbolt RA", 20, 0, 10, "Shoulder", "Upper Arm", "Lower Arm", "Hand", copy.deepcopy(largelaser))
 
 # Mechwarriors
 genericmechwarrior = Pilot("David B.", 5, 2)
@@ -966,10 +1146,15 @@ genericmechwarrior = Pilot("David B.", 5, 2)
 
 mechbits = [MechUtils, PPCs, Lasers, MechMissiles, MechAmmo, Ballistics]
 
-def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=None, target=None):
+def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=None, target=None, istest=False):
+    #print(firingmech.turn)
+    #print(shooter.name)
+    hitloc = None
+    hasheated = False
     target.turn+=0.00000001
     range = int(range)
-    skill = int(skill)
+    skill = getattr(firingmech, "pilot")
+    skill = getattr(skill, "gskill")
     if shooter.hasfired:
         return
     shooter.hasfired = True
@@ -1000,16 +1185,12 @@ def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=N
         hittarget = 0
     roll = random.randint(1, 6) + random.randint(1, 6)
     # print(rmod, roll, hittarget, range, shooter.name, target.tmm, movemod, skill, firingmech.name, target.name)
-    if not hasattr(shooter, "streak"):
+    if not hasattr(shooter, "streak") or hasattr(shooter, "streak") and  not getattr(shooter, "streak"):
         firingmech.wepsfired.append(shooter.name)
         firingmech.heat += shooter.heat
-    if hasattr(shooter, "cluster"):
-        if hasattr(shooter, "streak"):
-            if not shooter.streak:
-                firingmech.wepsfired.append(shooter.name)
-                firingmech.heat += shooter.heat
+        hasheated = True
     if roll >= hittarget:
-        if hasattr(shooter, "cluster") and hasattr(shooter, "streak"):
+        if isinstance(shooter, Missile) and getattr(shooter, "streak"):
             if shooter.streak == True:
                 firingmech.wepsfired.append(shooter.name)
                 firingmech.heat += shooter.heat
@@ -1024,10 +1205,18 @@ def fire(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=N
         loc = loc[-2:].lower()
         #print(loc)
         loc = getattr(target, loc)
+        if type(loc) == "str":
+            print(loc, "huh?")
+        #print(loc.name, type(loc))
+        if loc.isdestroyed:
+            while isinstance(loc, MechPart) and loc.isdestroyed:
+                loc = dooverflow(loc, target)
         shooter.hit = True
         firingmech.dmgthisturn += shooter.dmg
         firingmech.dmgpershot.append(shooter.dmg)
         target.resolvedamage(shooter.dmg, loc, hitloc[1])
+        if not hasheated:
+            firingmech.heat += shooter.heat
     else:
         #print(f"Miss with {shooter.name}!")
         return "Miss!"
@@ -1036,13 +1225,32 @@ def crit(target, critnum, mek):
     critoverflow = 0
     limbdeath = False
     crittablebits = 0
+    mtbits = ["Empty", "Ferro-Fibrous", "ISCASEII", "IS CASE II", "CLCASEII", "Clan CASE II", "ISCASE", "IS Endo Steel","IS EndoSteel","IS Endo-Steel","IS Endo Steel Structure","IS EndoSteel Structure","IS Endo-Steel Structure", "Clan Endo Steel","Clan Endo-Steel","Clan EndoSteel","Clan Endo-Steel Structure","Clan EndoSteel Structure","Clan Endo Steel Structure"]
     if target == "Mech Destroyed":
         return
-    #print(mek.name)
-    #print(target.slotqdir)
-    #print(crittablebits)
+    for i in target.slotqdir:
+        i = getattr(target, i)
+        if i is None:
+            continue
+        if not i is None:
+            if not type(i) is str:
+                crittablebits += 1
+                #print(i.name)
+                #print(i.name, "is a thing", crittablebits)
+                continue
+            elif type(i) is str and not i in mtbits:
+                crittablebits += 1
+                #print(i)
+                #print(i, "Is a thing", crittablebits)
+                continue
+    #print(target.name, "Has", crittablebits, "crittable bits!")
+    if crittablebits == 0 and not target.isdestroyed:
+        #print(f"{target.name} has no crittable stuff, moving on!")
+        crit(dooverflow(target, mek), (critnum), mek)
+        return
     if isinstance(target, str):
         return
+    target.owner.critsthisturn += 1
     if critnum == 3:
         a = lambda l:target.name.lower()[-2:] == l
         if a('hd') or a('ll') or a('rl') or a('la') or a('ra'):
@@ -1054,12 +1262,9 @@ def crit(target, critnum, mek):
                 mek.causeofdeath = ('HKill')
                 #print("Wowie")
             return
-    for i in target.slotqdir:
-        a = getattr(target, i)
-        if a != None: crittablebits +=1
     if critnum > crittablebits:
         critnum = crittablebits
-        #print(critnum, crittablebits)
+        #print(critnum, crittablebits, target.name)
     times = 0
     z=0
     while times < critnum:
@@ -1076,7 +1281,7 @@ def crit(target, critnum, mek):
         location = f"slot{roll}"
         a=getattr(target, location)
         if getattr(target, location) is None:
-            if z > 50:
+            if z > 100:
                 if target.name.lower()[-2:] =="ct":
                     mek.isdead = True
                     mek.causeofdeath = "CTKill"
@@ -1085,9 +1290,14 @@ def crit(target, critnum, mek):
             z+=1
             continue
         elif isinstance(a, str):
-            if a == "Cockpit":
+            if a == "Cockpit" and target is target.owner.hd:
+                if target.structure <= 0:
+                    mek.causeofdeath = "HKill"
+                    mek.isdead = True
+                    return
                 mek.isdead = True
                 mek.causeofdeath = "HKill"
+                #print(f"COCKSHOT {mek.name}")
                 return
             thing = loc + " " + a
             mek.motives[thing] = mek.turn
@@ -1102,18 +1312,25 @@ def crit(target, critnum, mek):
             #print(times)
             #print(z)
             z += 1
-            setattr(a, 'isdamaged', True)
-            if hasattr(a, 'isengine'):
-                if getattr(a, 'isengine'):
-                    mek.enginehits += 1
-                    if mek.enginehits >= 3:
-                        mek.isdead = True
+            if isinstance(a, MechUtility) or isinstance(a, HeatSink) or isinstance(a, JumpJet) or isinstance(a, Weapon) or isinstance(a, AmmoBin):
+                if hasattr(a, "isexplosive") and getattr(a, "isexplosive"):
+                    #print(f"Critting {a.name}!")
+                    mek.resolvedamage(a.parthit(True), target)
+                    setattr(target, "location", None)
+                    if mek.isdead:
+                        mek.causeofdeath = ("AmmoKill")
+                        return
+                else:
+                    a.parthit(True)
+                    #print(f"Critting {a.name}!")
+                    setattr(target, "location", None)
+                    if mek.isdead and mek.enginehits >= 3:
                         mek.causeofdeath = "EKill"
                         return
-            if isinstance(a, AmmoBin):
-                mek.resolvedamage(a.parthit(mek), target)
-                if mek.isdead:
-                    mek.causeofdeath = ("AmmoKill")
+            #if isinstance(a, AmmoBin):
+            #    mek.resolvedamage(a.parthit(True), target)
+            #    if mek.isdead:
+            #        mek.causeofdeath = ("AmmoKill")
             #print(getattr(a, 'isdamaged'))
             setattr(target, location, None)
             continue
@@ -1122,7 +1339,7 @@ def crit(target, critnum, mek):
     if critoverflow > 0: crit(dooverflow(target, mek), (critoverflow), mek)
 
 
-def docluster(dmg=0, weapon=None, firingmech=None, target=None):
+def docluster(dmg=0, weapon=None, firingmech=None, target=None, istest=False, predet=None):
     clust2 = [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]
     clust3 = [1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3]
     clust4 = [1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4]
@@ -1165,7 +1382,10 @@ def docluster(dmg=0, weapon=None, firingmech=None, target=None):
     ldict = {}
     #print(f"{weapon.cluster}")
     #print(cluster)
+    if not predet is None and not weapon.streak: roll = predet
     roll -=2
+    if not predet is None:
+        return cluster[roll]*weapon.dmg
     #print(cluster[roll] // weapon.grouping)
     hitloc = RollLocation()
     loc = hitloc[0]
@@ -1190,7 +1410,7 @@ def docluster(dmg=0, weapon=None, firingmech=None, target=None):
         target.resolvedamage(int(dmg * cluster[roll]%weapon.grouping), loc, hitloc[1])
 
 
-def targetcalc(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=None, target=None):
+def targetcalc(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firingmech=None, target=None, istest=False):
     rmod = 0
     if range <= shooter.minrange:
         rmod = (shooter.minrange - range)+1
@@ -1203,7 +1423,12 @@ def targetcalc(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firing
         rmod = 4
     else:
         return False
-    hittarget = rmod + shooter.targetmod + firingmech.pilot.gskill + heatmod + firingmech.movementmod + target.tmm
+    hittarget = rmod + shooter.targetmod + firingmech.pilot.gskill + firingmech.currentheatmod + firingmech.movementmod + target.tmm
+    if istest:
+        target.tmm = 2
+        hittarget = rmod + shooter.targetmod + firingmech.pilot.gskill + firingmech.currentheatmod + firingmech.movementmod + target.tmm
+        print(hittarget, rmod, shooter.targetmod, firingmech.pilot.gskill, firingmech.currentheatmod, firingmech.heat,
+              firingmech.movementmod, target.tmm)
     if target.isimmobile:
         hittarget -=4
     if hittarget <= 2:
@@ -1231,6 +1456,49 @@ def targetcalc(range, shooter, skill, allhit=False, heatmod=0, movemod=0, firing
     else:
         return False
 
+def dmgtester(shooter, firingmech, target, allhit=False):
+    if shooter.hasfired:
+        return
+    shooter.hasfired = True
+    range = abs(firingmech.pos - target.pos)
+    if range <= shooter.minrange:
+        rmod = (shooter.minrange - range)+1
+    elif shooter.minrange < range <= shooter.srange:
+        rmod = 0
+    elif range <= shooter.mrange:
+        rmod = 2
+    elif range <= shooter.lrange:
+        rmod = 4
+    if hasattr(shooter, 'ammo'):
+        if getattr(shooter, 'ammo') != None:
+            #print(shooter)
+            hadammo = firingmech.useammo(shooter)
+            if not hadammo:
+                # print("Click!", shooter.name)
+                return
+            else:
+                # print("Fired", shooter.name)
+                None
+        else:
+            raise(f"{shooter.name} has attr ammo, but Ammo is set to None!")
+    a = targetcalc(range, shooter, 0, False, 0, 0, firingmech, target, True)
+    wepdmg = shooter.dmg
+    if hasattr(shooter, "cluster") and not getattr(shooter, "cluster") is None:
+        if allhit:
+            wepdmg = docluster(shooter.dmg, shooter, firingmech, target, True, 12)
+        else:
+            wepdmg = docluster(shooter.dmg, shooter, firingmech, target, True, 7)
+    if allhit:
+        a = 1
+        firingmech.heat -= shooter.heat
+        print(a)
+    if a == False:
+        return
+    firingmech.wepsfired.append(shooter.name)
+    print(a, a*wepdmg)
+    firingmech.heat += shooter.heat
+    firingmech.dmgthisturn += (a * wepdmg)
+    #print(a*shooter.dmg)
 
 #protagonist = copy.deepcopy(awesome8q)
 #testsubject2= copy.deepcopy(awesome8q)
@@ -1256,7 +1524,7 @@ def partgen(part, data):
         slnum = idx + 1
         slnum = "slot" + str(slnum)
         i=item
-        if "(omnipod)" in item:
+        if "(omnipod)" in item.lower():
             # print(item)
             item = item[:-10]
             # print(item)
@@ -1266,13 +1534,15 @@ def partgen(part, data):
             for list in mechbits:
                 for value in list:
                     if item in value.ids:
-                        if part == "Head":
+                        if part.lower() == "head":
                             print(part, item)
-                        #print(value.name, value.slots)
+                        #print(value.name, value.slots, part)
                         partslots.update({slnum : copy.deepcopy(value)})
+                        print(value.name, part)
                         if value.slots > 1:
                             if (int(slnum[4:])+value.slots)-len(data) > 0:
                                 print("There's gonna be some overflow here!")
+                                #print(int(slnum[4:])+value.slots)-len(data)
                             for i in range(value.slots-1):
                                 slnumfutur = "slot" +(str(idx+i+2))
                                 partslots.update({slnumfutur:None})
@@ -1282,6 +1552,7 @@ def partgen(part, data):
                 else:
                     partslots[slnum] = i
             partslots["Part"] = part
+        #print(partslots)
     #print(partslots["slot3"] is partslots["slot4"])
     #print(partslots)
     return partslots
@@ -1416,6 +1687,7 @@ def mechgen(name, file, isprotag=False):
     else:
         BV = 20
     #print(armdict)
+    mechfile.close()
     mechhead = MechPart(f"{mechname} HD", armdict["hd"], 3, head["slot1"], head["slot2"], head["slot3"], head["slot4"], head["slot5"], head["slot6"], False, True)
     mechll = MechPart(f"{mechname} LL", armdict["ll"], struc[3], ll["slot1"], ll["slot2"], ll["slot3"], ll["slot4"],ll["slot5"], ll["slot6"])
     mechrl = MechPart(f"{mechname} RL", armdict["rl"], struc[3], rl["slot1"], rl["slot2"], rl["slot3"], rl["slot4"],rl["slot5"], rl["slot6"])
@@ -1424,10 +1696,11 @@ def mechgen(name, file, isprotag=False):
     mechlt = MechPartBig(f"{mechname} LT", armdict["lt"], armdict["rtl"], struc[1], lt["slot1"], lt["slot2"], lt["slot3"], lt["slot4"],lt["slot5"], lt["slot6"], lt["slot7"], lt["slot8"], lt["slot9"], lt["slot10"], lt["slot11"], lt["slot12"])
     mechrt = MechPartBig(f"{mechname} RT", armdict["rt"], armdict["rtr"], struc[1], rt["slot1"], rt["slot2"], rt["slot3"], rt["slot4"],rt["slot5"], rt["slot6"], rt["slot7"], rt["slot8"], rt["slot9"], rt["slot10"], rt["slot11"], rt["slot12"])
     mechct = MechPartBig(f"{mechname} CT", armdict["ct"], armdict["rtc"], struc[0], ct["slot1"], ct["slot2"], ct["slot3"], ct["slot4"], ct["slot5"], ct["slot6"], ct["slot7"], ct["slot8"], ct["slot9"], ct["slot10"], ct["slot11"], ct["slot12"])
-    mech = Battlemech(mechname, mechhead, mechla, mechra, mechll, mechrl, mechrt, mechlt, mechct, genericmechwarrior, walk, tonnage, case1, case2, isdouble)
+    mech = Battlemech(mechname, mechhead, mechla, mechra, mechll, mechrl, mechrt, mechlt, mechct, genericmechwarrior, walk, tonnage, case1, case2, isdouble, BV)
     print(f"Initializing {mechname} took {time.time()-strt} seconds")
     return mech
 def simulator(simulcnt, protag, atk, dfnd):
+    poslist = [21, 18, 15, 14, 12, 10, 9, 7, 6, 5, 3, 1]
     wepsfired = {f"turn{i+1}":[] for i in range(12)}
     starttime=time.time()
     heatturn = {f"turn{i+1}":[] for i in range(12)}
@@ -1438,33 +1711,75 @@ def simulator(simulcnt, protag, atk, dfnd):
     turnsdmg = {f"turn{i+1}":[] for i in range(12)}
     #print(turnsdmg)
     #print(tmms)
+    avgdmgbase = []
+    avgdmgopt = {f"Gunnery {i}":[] for i in range(6)}
+    prevhtopt = {f"Gunnery {i}":0 for i in range(6)}
+    avgdmgred = []
+    avgdmgalpha = []
     dfndname = dfnd.name
     deathturn = []
     defdeathturn = []
-    CoDs = {"HKill":0, "PKill":0, "EKill":0, "CTKill":0, "AmmoKill":0, "Survived":0}
-    defCoDs = {"HKill":0, "PKill":0, "EKill":0, "CTKill":0, "AmmoKill":0, "Survived":0}
+    CoDs = {"HKill":0, "PKill":0, "EKill":0, "TorsoEKill":0, "CTKill":0, "AmmoKill":0, "Survived":0}
+    defCoDs = {"HKill":0, "PKill":0, "EKill":0, "TorsoEKill":0, "CTKill":0, "AmmoKill":0, "Survived":0}
     dmgpershot = []
     critspergame = []
+    protagonistbase = copy.deepcopy(protag)
+    protagonistopt = copy.deepcopy(protag)
+    protagonistred = copy.deepcopy(protag)
+    protagonistalpha = copy.deepcopy(protag)
+    defender = copy.deepcopy(dfnd)
+    qtestmeks = [copy.copy(protagonistbase), copy.copy(protagonistopt), copy.copy(protagonistred), copy.copy(protagonistalpha)]
+    for i in range(12):
+        defender.move(True)
+        protagonistbase.move()
+        protagonistopt.move()
+        protagonistred.move()
+        protagonistalpha.move()
+        protagonistbase.pos = poslist[i]
+        protagonistopt.pos = poslist[i]
+        protagonistred.pos = poslist[i]
+        protagonistalpha.pos = poslist[i]
+        print(protagonistbase.pos)
+        protagonistbase.barrage(defender, False, True, istest=True)
+        for i in range(6):
+            protagonistopt.heat = prevhtopt[f"Gunnery {i}"]+1
+            protagonistopt.pilot.gskill = i
+            protagonistopt.barrage(defender, False, False, istest=True)
+            prevhtopt[f"Gunnery {i}"] = protagonistopt.heat
+            avgdmgopt[f"Gunnery {i}"].append(protagonistopt.dmgthisturn)
+            if not i == 5:
+                protagonistopt.useammo(None, True)
+        protagonistred.barrage(defender, True, False, istest=True)
+        protagonistalpha.barrage(defender, False, False, istest=True, allhit=True)
+        avgdmgbase.append(protagonistbase.dmgthisturn)
+        avgdmgred.append(protagonistred.dmgthisturn)
+        avgdmgalpha.append(protagonistalpha.dmgthisturn)
+        protagonistalpha.heat = 0
     for i in range(simulcnt):
         critsthisgame = 0
-        if i % 100 == 0: print(i)
+        if i % int(simulcnt/40) == 0: print(i)
         protagonist = copy.deepcopy(protag)
         attacker = copy.deepcopy(atk)
+        attacker.pilot.gskill = 4
         defender = copy.deepcopy(dfnd)
-        poslist = [21, 18, 15, 14, 12, 10, 9, 7, 6, 5, 3, 1]
         for i in range(12):
             protagonist.turn +=1
             protagonist.move(True)
-            if i !=0: attacker.move(False)
+            if i !=0: attacker.move(False, isrunning=True)
             tmms[f"tmm{i + 1}"].append(protagonist.tmm)
             attacker.turn+=1
             attacker.pos = poslist[i]
             attacker.barrage(protagonist)
             if protagonist.isdead:
+                #protagonist.printer()
                 deathturn.append(i+1)
                 if protagonist.causeofdeath == '':
                     if protagonist.ct.structure <= 0:
                         protagonist.causeofdeath = "CTKill"
+                    elif protagonist.hd.structure <=0:
+                        protagonist.causeofdeath = "HKill"
+                    elif protagonist.enginehits >= 3:
+                        protagonist.causeofdeath = "EKill"
                     else:
                         print("Uh Oh, soemthing not giving cause of death")
                         protagonist.causeofdeath = "CTKill"
@@ -1474,6 +1789,7 @@ def simulator(simulcnt, protag, atk, dfnd):
             CoDs["Survived"] += 1
         protagonist = copy.deepcopy(protag)
         for i in range(12):
+            defender.critsthisturn = 0
             protagonist.turn +=1
             defender.move(True)
             if i !=0: protagonist.move(False)
@@ -1481,57 +1797,93 @@ def simulator(simulcnt, protag, atk, dfnd):
             protagonist.pos = poslist[i]
             protagonist.barrage(defender)
             critsthisgame += defender.critsthisturn
-            turnsdmg[f"turn{i+1}"].append(protagonist.dmgthisturn)
-            dmgpershot.extend(protagonist.dmgpershot)
+            if protagonist.dmgthisturn != 0:
+                turnsdmg[f"turn{i+1}"].append(protagonist.dmgthisturn)
+            for j in protagonist.dmgpershot:
+                if j != 0:
+                    dmgpershot.append(j)
+            #print(protagonist.dmgthisturn)
             wepsfired[f"turn{i+1}"] = protagonist.wepsfired
             heatturn[f"turn{i + 1}"].append(protagonist.heat)
             if defender.isdead:
                 defdeathturn.append(i+1)
+                # defender.printer()
                 if defender.causeofdeath == '':
                     if defender.ct.structure <= 0:
                         defender.causeofdeath = "CTKill"
+                    elif defender.hd.structure <=0:
+                        defender.causeofdeath = "HKill"
+                    elif defender.enginehits >= 3:
+                        defender.causeofdeath = "EKill"
                     else:
                         print("Uh Oh, soemthing not giving cvause of death")
                         defender.causeofdeath = "CTKill"
                 defCoDs[defender.causeofdeath] +=1
+                #print(turnsdmg)
+                #print(dmgpershot)
                 break
         if not defender.isdead:
             defCoDs["Survived"] += 1
         critspergame.append(critsthisgame)
     totmeandmg = 0
-    try:
-        for k, v in tmms.items():
+    testmed = 0
+    for k, v in tmms.items():
+        try:
             tmms[k] = mean(v)
-    except:
-        pass
-    try:
-        for k, v in turnsdmg.items():
-            turnsdmg[k] = mean(v)
-            totmeandmg += mean(v)
-    except:
-        pass
-    try:
-        for k, v in heatturn.items():
+        except:
+            tmms[k] = 0
+    for k, v in turnsdmg.items():
+        a=[]
+        #print(k, v)
+        for i in v:
+            if i != 0:
+                a.append(i)
+            else:
+                continue
+                #print(a)
+        #print(a)
+        try:
+            turnsdmg[k] = median(v)
+        except statistics.StatisticsError:
+            turnsdmg[k] = 0
+        #print(turnsdmg[k])
+        try:
+            totmeandmg += median(v)
+            testmed += mean(v)
+        except statistics.StatisticsError:
+            pass
+    # print(f"Meantest: {testmed}")
+    for k, v in heatturn.items():
+        #print(k, v)
+        try:
             heatturn[k] = mean(v)
-    except:
-        pass
+        except statistics.StatisticsError:
+            heatturn[k] = 0
+    #print(dmgpershot)
+    #print(a)
     print(f"Mean {protag.name} Death Turn : {mean(deathturn)}")
     print(CoDs)
+    print(f"Survival {str(CoDs["Survived"]/simulcnt*100)[0:5]}%")
     print(f"TMMs : {tmms}")
     try:
-        print(f"Damage per shot : {mean(dmgpershot)}")
+        print(f"Damage per shot : {median(dmgpershot)}")
     except:
         pass
     print(f"Mean Damage per turn : {turnsdmg}")
     print(f"Total Mean DMG : {totmeandmg}")
-    print(f"Crits per Game : {mean(critspergame)}")
+    print(f"Base AVGDMG: {sum(avgdmgbase)}")
+    for k, v in avgdmgopt.items():
+        print(k, sum(avgdmgopt[k]))
+    print(f"Red ABGDMG: {sum(avgdmgred)}")
+    print(f"ALPHA DMG: {sum(avgdmgalpha)}")
+    print(f"Crits per Game : {median(critspergame)}, {mean(critspergame)}, {critspergame}")
     print(f"Weapons fired each turn: {wepsfired}")
     print(f"Heat per turn {heatturn}")
-    print(f"Mean {dfndname} Death Turn: {mean(defdeathturn)}")
+    print(f"Mean {dfndname} Death Turn: {median(defdeathturn)}, {mean(defdeathturn)}")
     print(f"Causes of death for {dfndname}: {defCoDs}")
+    print(f"Survival {str(defCoDs["Survived"]/simulcnt*100)[0:5]}%")
     print(f"Program ran in {time.time()-starttime} seconds!")
-    # print(protag.sinking)
-
+    print(protagonist.sinking)
     #print(mechdata)
 files = os.listdir()
 for i in files:
@@ -1603,10 +1955,8 @@ protag = mechgen("Silly Lad", protagonist, True)
 #print(protag.la.slot3 is protag.la.slot4)
 defender = mechgen("Fodder", target, False)
 
-try:
-    print(getattr(Battlemech, "isexplosive"))
-except:
-    pass
-simulator(1000, protag, atk, defender)
+
+simulator(40, protag, atk, defender)
 #print(islrm15.ratio)
 #print("merry christmas!")
+#print(atk.name, atk.ct.qdir)
